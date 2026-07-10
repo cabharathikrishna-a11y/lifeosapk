@@ -116,7 +116,7 @@ class MainActivity : ComponentActivity() {
 
             // Configure App Check Debug Token in SharedPreferences so the Debug Provider uses it
             try {
-                val debugToken = "C63F78D1-E3FB-449C-BCD0-70F9C60AE0C9"
+                val debugToken = "28D9431B-D767-40B7-AD1A-1F0A97161FA9"
                 val files = listOf(
                     "com.google.firebase.appcheck.debug.store.DebugAppCheckProviderFactory",
                     "com.google.firebase.appcheck.store",
