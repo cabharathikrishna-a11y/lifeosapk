@@ -1,0 +1,32 @@
+{
+  "rules": {
+    "users": {
+      ".read": "true",
+      "$username": {
+        ".write": "true"
+      }
+    },
+    "bells": {
+      "$username": {
+        ".read": "true",
+        ".write": "true"
+      }
+    },
+    "requests": {
+      "$username": {
+        ".read": "true",
+        "$requester": {
+          ".write": "true"
+        }
+      }
+    },
+    "transfer": {
+      "$requester": {
+        "$provider": {
+          ".read": "true",
+          ".write": "true"
+        }
+      }
+    }
+  }
+}

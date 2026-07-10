@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Life OS</string>
+    <string name="accessibility_service_desc">Required to monitor active social apps and block addictive elements like Reels, Shorts, Spotlight, and Stories to keep you focused.</string>
+    <string name="default_notification_channel_id">fcm_default_channel</string>
+</resources>

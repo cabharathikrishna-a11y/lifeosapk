@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Typographic 'LIFE' Layer -->
+    <!-- L -->
+    <path
+        android:pathData="M 30,30 L 30,50 L 40,50"
+        android:strokeColor="#4A83F5"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- I -->
+    <path
+        android:pathData="M 45,30 L 45,50"
+        android:strokeColor="#4A83F5"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- F -->
+    <path
+        android:pathData="M 51,50 L 51,30 L 60,30 M 51,40 L 58,40"
+        android:strokeColor="#4A83F5"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- E -->
+    <path
+        android:pathData="M 66,50 L 66,30 L 76,30 M 66,40 L 73,40 M 66,50 L 76,50"
+        android:strokeColor="#4A83F5"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- Typographic 'OS' Layer -->
+    <!-- O -->
+    <path
+        android:pathData="M 46,62 A 7,7 0 1,1 46,78 A 7,7 0 1,1 46,62"
+        android:strokeColor="#4A83F5"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- S -->
+    <path
+        android:pathData="M 68,64 C 68,62 60,62 60,65 C 60,68 68,68 68,72 C 68,76 60,76 60,74"
+        android:strokeColor="#4A83F5"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+</vector>
