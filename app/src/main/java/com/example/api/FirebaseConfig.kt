@@ -7,7 +7,8 @@ import android.content.Context
  * Contains URL constants for future online synchronization and integration.
  */
 object FirebaseConfig {
-    const val DATABASE_URL = "https://cloud-storage-f8ab3-default-rtdb.asia-southeast1.firebasedatabase.app/"
+    const val DATABASE_URL = "https://lifeosca-default-rtdb.asia-southeast1.firebasedatabase.app/"
+    const val UPDATE_DATABASE_URL = "https://cloud-storage-f8ab3-default-rtdb.asia-southeast1.firebasedatabase.app/"
 
     fun getDatabaseUrl(context: Context): String {
         val prefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)

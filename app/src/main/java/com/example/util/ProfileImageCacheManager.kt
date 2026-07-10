@@ -57,7 +57,7 @@ object ProfileImageCacheManager {
         } else {
             // Pattern B: Download from Firebase Storage via REST API
             try {
-                val storageUrl = "https://firebasestorage.googleapis.com/v0/b/cloud-storage-f8ab3.appspot.com/o/profiles%2F${username}%2Fprofile_photo.jpg?alt=media"
+                val storageUrl = "https://firebasestorage.googleapis.com/v0/b/lifeosca.firebasestorage.app/o/profiles%2F${username}%2Fprofile_photo.jpg?alt=media"
                 val url = URL(storageUrl)
                 val conn = url.openConnection() as HttpURLConnection
                 conn.connectTimeout = 5000

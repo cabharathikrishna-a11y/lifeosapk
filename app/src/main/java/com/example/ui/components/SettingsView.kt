@@ -4149,9 +4149,9 @@ fun FirebaseConfigurationSection(viewModel: AppViewModel) {
     val prefs = remember { context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE) }
 
     var dbUrl by remember { mutableStateOf(prefs.getString("custom_firebase_db_url", com.example.api.FirebaseConfig.DATABASE_URL) ?: com.example.api.FirebaseConfig.DATABASE_URL) }
-    var projectId by remember { mutableStateOf(prefs.getString("custom_firebase_project_id", "cloud-storage-f8ab3") ?: "cloud-storage-f8ab3") }
-    var appId by remember { mutableStateOf(prefs.getString("custom_firebase_app_id", "1:1071485303521:android:9e4d5881f185efbe5d5d88") ?: "1:1071485303521:android:9e4d5881f185efbe5d5d88") }
-    var storageBucket by remember { mutableStateOf(prefs.getString("custom_firebase_storage_bucket", "cloud-storage-f8ab3.appspot.com") ?: "cloud-storage-f8ab3.appspot.com") }
+    var projectId by remember { mutableStateOf(prefs.getString("custom_firebase_project_id", "lifeosca") ?: "lifeosca") }
+    var appId by remember { mutableStateOf(prefs.getString("custom_firebase_app_id", "1:432934819080:android:97852f87b34cae7fbcc8bd") ?: "1:432934819080:android:97852f87b34cae7fbcc8bd") }
+    var storageBucket by remember { mutableStateOf(prefs.getString("custom_firebase_storage_bucket", "lifeosca.firebasestorage.app") ?: "lifeosca.firebasestorage.app") }
     var realtimeSyncEnabled by remember { mutableStateOf(prefs.getBoolean("enable_firebase_realtime_sync", true)) }
 
     Card(
@@ -4311,9 +4311,9 @@ fun FirebaseConfigurationSection(viewModel: AppViewModel) {
                     onClick = {
                         // Reset to defaults
                         dbUrl = com.example.api.FirebaseConfig.DATABASE_URL
-                        projectId = "cloud-storage-f8ab3"
-                        appId = "1:1071485303521:android:9e4d5881f185efbe5d5d88"
-                        storageBucket = "cloud-storage-f8ab3.appspot.com"
+                        projectId = "lifeosca"
+                        appId = "1:432934819080:android:97852f87b34cae7fbcc8bd"
+                        storageBucket = "lifeosca.firebasestorage.app"
                         realtimeSyncEnabled = true
 
                         prefs.edit()
