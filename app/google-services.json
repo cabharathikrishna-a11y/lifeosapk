@@ -8,20 +8,12 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:432934819080:android:97852f87b34cae7fbcc8bd",
+        "mobilesdk_app_id": "1:432934819080:android:919f6a7b8f1a2a56bcc8bd",
         "android_client_info": {
-          "package_name": "life.os"
+          "package_name": "com.lifeos.com"
         }
       },
       "oauth_client": [
-        {
-          "client_id": "432934819080-arbj4dlukr8rk32tdikrk47kl9oltjpg.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "life.os",
-            "certificate_hash": "596e5f8853428f5875f7ae94f6c701335258a884"
-          }
-        },
         {
           "client_id": "432934819080-jn72ep6smqj8r4q46jj1gjqchepi91ue.apps.googleusercontent.com",
           "client_type": 3
