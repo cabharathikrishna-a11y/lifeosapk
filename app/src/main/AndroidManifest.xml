@@ -62,10 +62,7 @@
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="@string/default_notification_channel_id" />
-        <!-- Enable registering your app instance with FCM using the Firebase Installation ID (FID) -->
-        <meta-data
-            android:name="firebase_messaging_installation_id_enabled"
-            android:value="true" />
+
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -146,6 +143,10 @@
 
         <receiver
             android:name=".receiver.TaskReminderReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".receiver.HistoryScheduledSyncReceiver"
             android:exported="false" />
 
         <receiver

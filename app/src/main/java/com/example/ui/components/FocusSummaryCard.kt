@@ -51,9 +51,15 @@ fun FocusSummaryCard(
     val completedTodaySecs = remember(focusRecords, todayStr) {
         focusRecords.sumOf { com.example.util.FocusTimerManager.getOverlapSecondsForDate(it, todayStr) }
     }
-    val todaySecs = remember(completedTodaySecs, liveAddedSeconds, activeTimer, todayStats, currentTime.value) {
-        if (todayStats != null || activeTimer != null) {
-            val baseMs = todayStats?.todayFocusTimeMs ?: 0L
+    val todaySecs = remember(completedTodaySecs, liveAddedSeconds, activeTimer, todayStats, todayStr, currentTime.value) {
+        val systemTodayStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+        val isTargetDateToday = (todayStr == systemTodayStr)
+        if (isTargetDateToday && (todayStats != null || activeTimer != null)) {
+            val baseMs = if (todayStats?.dateString == todayStr || todayStats?.dateString.isNullOrEmpty()) {
+                todayStats?.todayFocusTimeMs ?: 0L
+            } else {
+                0L
+            }
             val liveDeltaMs = if (activeTimer != null) {
                 when (activeTimer.status) {
                     "FOCUSING" -> {

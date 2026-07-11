@@ -1192,6 +1192,13 @@ class AppViewModel(application: Application, private val repository: LocalReposi
         viewModelScope.launch {
             com.example.api.FirebaseRepository.usersState.collect { users ->
                 _allUsers.value = users
+                val username = _currentUsername.value
+                if (username != null) {
+                    val remoteMe = users[username]
+                    if (remoteMe != null && remoteMe != _currentUserRemote.value) {
+                        _currentUserRemote.value = remoteMe
+                    }
+                }
             }
         }
 
@@ -1743,6 +1750,16 @@ class AppViewModel(application: Application, private val repository: LocalReposi
         val uploadTimestamp = System.currentTimeMillis()
         lastUploadedLocalSyncTimestamp = uploadTimestamp
 
+        val activeTimerState = com.example.api.ActiveTimer(
+            status = if (!isFocusPhase) "BREAK" else if (isTimerActive || isSwActive) "FOCUSING" else if (cumSecs > 0 || swSecs > 0) "PAUSED" else "RELAXING",
+            mode = if (isSwActive) "STOPWATCH" else "POMODORO",
+            startTimeMs = if (isFocusing) FocusTimerManager.lastResumeTimeMs.value ?: System.currentTimeMillis() else 0L,
+            targetEndTimeMs = if (isTimerActive && !isSwActive) (FocusTimerManager.lastResumeTimeMs.value ?: System.currentTimeMillis()) + (FocusTimerManager.timerSecondsLeft.value * 1000L) else 0L,
+            accumulatedFocusMs = if (isFocusPhase) FocusTimerManager.accumulatedSessionTimeMs.value else 0L,
+            accumulatedBreakMs = if (!isFocusPhase) FocusTimerManager.accumulatedSessionTimeMs.value else 0L,
+            timezoneOffsetMinutes = java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / (60 * 1000)
+        )
+
         val updatedUser = if (_shareFocusDetailsEnabled.value) {
             baseUser.copy(
                 isFocusing = isFocusing,
@@ -1750,11 +1767,12 @@ class AppViewModel(application: Application, private val repository: LocalReposi
                 lastResumeTimeMs = if (isFocusing) FocusTimerManager.lastResumeTimeMs.value else null,
                 currentTaskTitle = if (isFocusing) currentTaskTitle else null,
                 currentTag = if (isFocusing) currentTag else null,
-                todaysFocusRecords = if (_shareFocusHistoryEnabled.value) todayRecords else null,
+                todaysFocusRecords = null,
                 isStopwatchMode = isSwActive,
                 lastUpdatedTimestamp = uploadTimestamp,
                 focusStatus = focusStatus,
-                lastUpdatedDeviceId = FocusTimerManager.getOrCreateDeviceId(getApplication())
+                lastUpdatedDeviceId = FocusTimerManager.getOrCreateDeviceId(getApplication()),
+                activeTimer = activeTimerState
             )
         } else {
             baseUser.copy(
@@ -1767,7 +1785,8 @@ class AppViewModel(application: Application, private val repository: LocalReposi
                 isStopwatchMode = isSwActive,
                 lastUpdatedTimestamp = uploadTimestamp,
                 focusStatus = focusStatus,
-                lastUpdatedDeviceId = FocusTimerManager.getOrCreateDeviceId(getApplication())
+                lastUpdatedDeviceId = FocusTimerManager.getOrCreateDeviceId(getApplication()),
+                activeTimer = activeTimerState
             )
         }
         
@@ -1864,303 +1883,169 @@ class AppViewModel(application: Application, private val repository: LocalReposi
         
         val context = getApplication<android.app.Application>()
         
-        // 1. Gather all local state properties
-        val isLocalFocusing = FocusTimerManager.isTimerRunning.value || FocusTimerManager.isStopwatchActive.value
-        val localAccumulatedMs = FocusTimerManager.accumulatedSessionTimeMs.value
-        val localLastResumeMs = FocusTimerManager.lastResumeTimeMs.value ?: 0L
-        val localIsStopwatch = FocusTimerManager.isStopwatchActive.value
-        val isLocalFocusPhase = FocusTimerManager.isFocusPhase.value
-        val localStatus = if (!isLocalFocusPhase) {
-            "paused"
-        } else if (isLocalFocusing) {
-            "focusing"
-        } else if (localAccumulatedMs > 0) {
-            "paused"
-        } else {
-            "idle"
-        }
-        val localLastUpdatedTimestamp = FocusTimerManager.lastLocalInteractionTimestamp.value
-        val localLastButtonClicked = FocusTimerManager.lastButtonClicked.value
-        val localLastButtonClickedTimestamp = FocusTimerManager.lastButtonClickedTimestamp.value
-        
-        // 2. Gather remote state properties
-        val isRemoteFocusing = remoteUser.isFocusing == true
-        val remoteAccumulatedMs = remoteUser.accumulatedTimeMs
-        val remoteLastResumeMs = remoteUser.lastResumeTimeMs ?: 0L
-        val remoteIsStopwatch = remoteUser.isStopwatchMode == true
-        val remoteStatus = remoteUser.focusStatus ?: "idle"
-        val remoteLastUpdatedTimestamp = remoteUser.lastUpdatedTimestamp ?: 0L
-        val remoteLastButtonClicked = remoteUser.lastButtonClicked
-        val remoteLastButtonClickedTimestamp = remoteUser.lastButtonClickedTimestamp ?: 0L
-        
-        // 3. Calculate elapsed times to check for sync discrepancy
-        val localElapsedSecs = if (localIsStopwatch) {
-            FocusTimerManager.stopwatchSeconds.value
-        } else {
-            (FocusTimerManager.timerDurationMinutes.value * 60 - FocusTimerManager.timerSecondsLeft.value).coerceAtLeast(0)
-        }
-        val remoteElapsedSecs = ((remoteAccumulatedMs + (if (isRemoteFocusing && remoteLastResumeMs > 0L) (System.currentTimeMillis() - remoteLastResumeMs) else 0L)) / 1000).toInt()
-        
-        val hasTimeDiscrepancy = isLocalFocusing && isRemoteFocusing && Math.abs(localElapsedSecs - remoteElapsedSecs) > 5
-        val hasStateDiscrepancy = (isLocalFocusing != isRemoteFocusing) || (localStatus != remoteStatus) || (localIsStopwatch != remoteIsStopwatch)
-        
-        val discrepancyDetected = hasStateDiscrepancy || hasTimeDiscrepancy
-        
-        var forceApplyRemote = false
-        if (discrepancyDetected) {
-            FocusTimerManager.addSystemLog(context, "Discrepancy Detected", "CONFLICT_RESOLUTION", 
-                "LocalState(focus=$isLocalFocusing, status=$localStatus, sw=$localIsStopwatch, elapsed=$localElapsedSecs, lastBtn=$localLastButtonClicked, btnTime=$localLastButtonClickedTimestamp, updateTime=$localLastUpdatedTimestamp) " +
-                "vs RemoteState(focus=$isRemoteFocusing, status=$remoteStatus, sw=$remoteIsStopwatch, elapsed=$remoteElapsedSecs, lastBtn=$remoteLastButtonClicked, btnTime=$remoteLastButtonClickedTimestamp, updateTime=$remoteLastUpdatedTimestamp)"
-            )
-            
-            val remoteDeviceLogs = remoteUser.deviceLogs
-            if (!remoteDeviceLogs.isNullOrEmpty()) {
-                FocusTimerManager.addSystemLog(context, "Remote Device Logs Received", "CONFLICT_RESOLUTION", 
-                    "Logs from remote device (${remoteUser.lastUpdatedDeviceId ?: "unknown"}):\n$remoteDeviceLogs"
-                )
-            }
-            
-            var remoteWins = false
-            if (remoteLastButtonClickedTimestamp > localLastButtonClickedTimestamp) {
-                remoteWins = true
-            } else if (remoteLastButtonClickedTimestamp == localLastButtonClickedTimestamp) {
-                if (remoteLastUpdatedTimestamp > localLastUpdatedTimestamp) {
-                    remoteWins = true
-                } else if (remoteLastUpdatedTimestamp == localLastUpdatedTimestamp) {
-                    val localDeviceId = FocusTimerManager.getOrCreateDeviceId(context)
-                    val remoteDeviceId = remoteUser.lastUpdatedDeviceId ?: ""
-                    if (remoteDeviceId > localDeviceId) {
-                        remoteWins = true
-                    }
-                }
-            }
-            
-            if (!remoteWins) {
-                FocusTimerManager.addSystemLog(context, "Local State Wins", "CONFLICT_RESOLUTION", "Resolving conflict: Local state wins. Force pushing local state to Firebase.")
-                FocusTimerManager.syncStateToFirebase(context)
-                return
-            } else {
-                FocusTimerManager.addSystemLog(context, "Remote State Wins", "CONFLICT_RESOLUTION", "Resolving conflict: Remote state wins. Syncing local state to remote.")
-                forceApplyRemote = true
-            }
-        }
-        
-        val remoteButtonTimestamp = remoteUser.lastButtonClickedTimestamp ?: 0L
-        val localProcessedButtonTimestamp = prefs.getLong("last_processed_button_clicked_timestamp", 0L)
-        if (remoteButtonTimestamp > localProcessedButtonTimestamp) {
-            prefs.edit().putLong("last_processed_button_clicked_timestamp", remoteButtonTimestamp).apply()
-            
-            val buttonAction = remoteUser.lastButtonClicked
-            if (buttonAction != null) {
-                isPerformingRemoteSync = true
-                try {
-                    when (buttonAction) {
-                        "pause_timer" -> {
-                            if (FocusTimerManager.isTimerRunning.value) {
-                                FocusTimerManager.pauseTimer(context)
-                            }
-                        }
-                        "start_timer" -> {
-                            if (!FocusTimerManager.isTimerRunning.value) {
-                                if (FocusTimerManager.isStopwatchActive.value) {
-                                    FocusTimerManager.pauseStopwatch(context)
-                                }
-                                FocusTimerManager.startTimer(context)
-                            }
-                        }
-                        "take_break_pomo" -> {
-                            FocusTimerManager.takeBreakFromPomodoro(context)
-                        }
-                        "take_break_stopwatch" -> {
-                            FocusTimerManager.takeBreakFromStopwatch(context)
-                        }
-                        "end" -> {
-                            if (FocusTimerManager.isTimerRunning.value) {
-                                FocusTimerManager.resetTimer(context, saveSession = false)
-                            }
-                            if (FocusTimerManager.isStopwatchActive.value) {
-                                FocusTimerManager.resetStopwatch(context, saveSession = false)
-                            }
-                        }
-                        "start_stopwatch" -> {
-                            if (!FocusTimerManager.isStopwatchActive.value) {
-                                if (FocusTimerManager.isTimerRunning.value) {
-                                    FocusTimerManager.pauseTimer(context)
-                                }
-                                FocusTimerManager.startStopwatch(context)
-                            }
-                        }
-                        "pause_stopwatch" -> {
-                            if (FocusTimerManager.isStopwatchActive.value) {
-                                FocusTimerManager.pauseStopwatch(context)
-                            }
-                        }
-                        "reset_timer" -> {
-                            FocusTimerManager.resetTimer(context)
-                        }
-                        "reset_stopwatch" -> {
-                            FocusTimerManager.resetStopwatch(context)
-                        }
-                        "skip_or_end_break" -> {
-                            FocusTimerManager.skipOrEndBreak(context)
-                        }
-                    }
-                } catch (e: kotlinx.coroutines.CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    android.util.Log.e("AppViewModel", "Failed to sync button action: $buttonAction", e)
-                } finally {
-                    isPerformingRemoteSync = false
-                }
-            }
-        }
-
         // If this update is older than or equal to what we last processed from remote or what we last uploaded ourselves, ignore to prevent loops
-        if (!forceApplyRemote) {
-            if (serverTimestamp <= lastProcessedRemoteSyncTimestamp || 
-                serverTimestamp <= lastUploadedLocalSyncTimestamp ||
-                serverTimestamp <= FocusTimerManager.lastLocalInteractionTimestamp.value) {
-                return
-            }
+        if (serverTimestamp <= lastProcessedRemoteSyncTimestamp || 
+            serverTimestamp <= lastUploadedLocalSyncTimestamp ||
+            serverTimestamp <= FocusTimerManager.lastLocalInteractionTimestamp.value) {
+            return
         }
         
         lastProcessedRemoteSyncTimestamp = serverTimestamp
-        
-        // Prevent local state changes during remote synchronization from triggering a concurrent/redundant upload
         isPerformingRemoteSync = true
         
         try {
-            
             // 1. Sync Focus Records History (Already Focused Time)
             remoteUser.todaysFocusRecords?.let { remoteRecords ->
-                val localRecords = FocusTimerManager.focusRecords.value.toMutableList()
-                var listUpdated = false
+                // Overwrite local list with remote records
+                val sortedRecords = remoteRecords.sortedByDescending { it.startTime }
                 
-                // Add any remote record that is missing in local list.
-                // We consider a record matching if they have same startTime, endTime, and duration.
-                for (remoteRec in remoteRecords) {
-                    val alreadyHas = localRecords.any { localRec ->
-                        localRec.startTime == remoteRec.startTime &&
-                        localRec.endTime == remoteRec.endTime &&
-                        localRec.durationSeconds == remoteRec.durationSeconds
-                    }
-                    if (!alreadyHas) {
-                        localRecords.add(0, remoteRec)
-                        listUpdated = true
+                // Update StateFlow
+                FocusTimerManager.setFocusRecords(sortedRecords)
+                
+                // Save to SharedPreferences
+                val serialized = sortedRecords.joinToString("\n") { 
+                    val b64Notes = android.util.Base64.encodeToString(it.notes.toByteArray(), android.util.Base64.NO_WRAP)
+                    "${it.startTime}|${it.endTime}|${it.taskTitle}|${it.durationMinutes}|${it.dateString}|$b64Notes|${it.durationSeconds}" 
+                }
+                prefs.edit().putString("focus_records_list", serialized).apply()
+                
+                // Save to Room Database safely using NonCancellable block
+                val todayStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+                viewModelScope.launch(Dispatchers.IO) {
+                    try {
+                        val db = com.example.data.AppDatabase.getInstance(context)
+                        // Delete existing records for today
+                        db.focusRecordDao().deleteRecordsForDate(todayStr)
+                        
+                        // Insert remote records
+                        for (rec in sortedRecords) {
+                            val entity = com.example.data.FocusRecordEntity(
+                                taskTitle = rec.taskTitle,
+                                tag = rec.tag ?: "",
+                                notes = rec.notes,
+                                durationSeconds = rec.durationSeconds,
+                                durationMinutes = rec.durationMinutes,
+                                dateString = rec.dateString,
+                                startTime = rec.startTime,
+                                endTime = rec.endTime,
+                                timestamp = System.currentTimeMillis()
+                            )
+                            db.focusRecordDao().insertRecord(entity)
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("AppViewModel", "Failed to overwrite Room with Firebase records", e)
                     }
                 }
                 
-                if (listUpdated) {
-                    // Sort by startTime descending or similar, and save
-                    localRecords.sortByDescending { it.startTime }
-                    
-                    // Update StateFlow & SharedPreferences
-                    FocusTimerManager.setFocusRecords(localRecords)
-                    
-                    // We also need to save them using the companion method
-                    val serialized = localRecords.joinToString("\n") { 
-                        val b64Notes = android.util.Base64.encodeToString(it.notes.toByteArray(), android.util.Base64.NO_WRAP)
-                        "${it.startTime}|${it.endTime}|${it.taskTitle}|${it.durationMinutes}|${it.dateString}|$b64Notes|${it.durationSeconds}" 
-                    }
-                    prefs.edit().putString("focus_records_list", serialized).apply()
-                    
-                    // Recalculate today's total minutes / count
-                    val todayStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
-                    val todayRecsNum = localRecords.filter { it.dateString == todayStr }.size
-                    val totalMins = localRecords.sumOf { it.durationMinutes }
-                    
-                    FocusTimerManager.setTodayPomosCount(todayRecsNum)
-                    FocusTimerManager.setTotalFocusMinutes(totalMins)
-                    
-                    prefs.edit()
-                        .putInt("today_pomos_count", todayRecsNum)
-                        .putInt("total_focus_minutes", totalMins)
-                        .apply()
-                }
+                // Recalculate today's total minutes / count
+                val todayRecsNum = sortedRecords.filter { it.dateString == todayStr }.size
+                val totalMins = sortedRecords.sumOf { it.durationMinutes }
+                
+                FocusTimerManager.setTodayPomosCount(todayRecsNum)
+                FocusTimerManager.setTotalFocusMinutes(totalMins)
+                
+                prefs.edit()
+                    .putInt("today_pomos_count", todayRecsNum)
+                    .putInt("total_focus_minutes", totalMins)
+                    .apply()
             }
             
-            // 2. Sync Active Focus State (Timer / Stopwatch currently focusing)
-            val isRemoteFocusing = remoteUser.isFocusing == true
-            val isRemoteStopwatch = remoteUser.isStopwatchMode == true
-            
-            val isLocalFocusing = FocusTimerManager.isTimerRunning.value || FocusTimerManager.isStopwatchActive.value
-            val hasNewRemoteButton = remoteButtonTimestamp > localProcessedButtonTimestamp
-
-            // Safeguard active local timer from passive remote state sync.
-            // If local is currently focusing, we only allow remote state to modify or stop our timer
-            // if there was a brand new explicit button click from a remote device,
-            // OR if the remote state explicitly says we are no longer focusing (e.g. paused or stopped).
-            if (isLocalFocusing && !hasNewRemoteButton && isRemoteFocusing) {
-                return
-            }
-            
-            if (isRemoteFocusing) {
-                val currentChunkMs = if (remoteUser.lastResumeTimeMs != null) {
-                    System.currentTimeMillis() - remoteUser.lastResumeTimeMs
-                } else {
-                    0L
+            // 2. Sync Active Focus State (Mirror activeTimer directly)
+            val activeTimer = remoteUser.activeTimer
+            if (activeTimer == null || activeTimer.status == "RELAXING") {
+                // Remote is Relaxing -> Reset local if active
+                if (FocusTimerManager.isTimerRunning.value) {
+                    FocusTimerManager.resetTimer(context, saveSession = false)
                 }
-                val totalMs = remoteUser.accumulatedTimeMs + maxOf(0L, currentChunkMs)
-                val elapsedSeconds = (totalMs / 1000).toInt()
-                
-                if (isRemoteStopwatch) {
-                    // Stopwatch Mode
-                    val isLocalStopwatchRunning = FocusTimerManager.isStopwatchActive.value
-                    if (!isLocalStopwatchRunning || Math.abs(FocusTimerManager.stopwatchSeconds.value - elapsedSeconds) > 5) {
-                        // Adjust/start stopwatch
-                        if (FocusTimerManager.isTimerRunning.value) {
-                            FocusTimerManager.pauseTimer(context)
-                        }
-                        FocusTimerManager.setAccumulatedSessionTimeMs(remoteUser.accumulatedTimeMs)
-                        FocusTimerManager.setLastResumeTimeMs(remoteUser.lastResumeTimeMs)
-                        FocusTimerManager.setStopwatchSeconds(elapsedSeconds)
-                        if (!isLocalStopwatchRunning) {
-                            FocusTimerManager.startStopwatch(context)
-                        }
-                    }
-                } else {
-                    // Pomodoro/Timer Mode
-                    val timerDurationSecs = FocusTimerManager.timerDurationMinutes.value * 60
-                    val actualSecondsLeft = (timerDurationSecs - elapsedSeconds).coerceAtLeast(0)
-                    
-                    if (actualSecondsLeft > 0) {
-                        val isLocalTimerRunning = FocusTimerManager.isTimerRunning.value
-                        if (!isLocalTimerRunning || Math.abs(FocusTimerManager.timerSecondsLeft.value - actualSecondsLeft) > 5) {
-                            if (FocusTimerManager.isStopwatchActive.value) {
-                                FocusTimerManager.pauseStopwatch(context)
-                            }
-                            FocusTimerManager.setAccumulatedSessionTimeMs(remoteUser.accumulatedTimeMs)
-                            FocusTimerManager.setLastResumeTimeMs(remoteUser.lastResumeTimeMs)
-                            FocusTimerManager.setTimerSecondsLeft(actualSecondsLeft)
-                            if (!isLocalTimerRunning) {
-                                FocusTimerManager.startTimer(context)
-                            }
-                        }
-                    } else {
-                        // Timer finished remotely. Stop if running.
-                        if (FocusTimerManager.isTimerRunning.value) {
-                            FocusTimerManager.pauseTimer(context)
-                        }
-                    }
+                if (FocusTimerManager.isStopwatchActive.value) {
+                    FocusTimerManager.resetStopwatch(context, saveSession = false)
                 }
             } else {
-                // Remote is NOT focusing: if local is focusing, stop/pause it based on remote status!
-                if (isLocalFocusing) {
-                    val status = remoteUser.focusStatus ?: "idle"
-                    if (status == "paused") {
-                        if (FocusTimerManager.isTimerRunning.value) {
-                            FocusTimerManager.pauseTimer(context)
+                val isStopwatch = activeTimer.mode == "STOPWATCH"
+                when (activeTimer.status) {
+                    "FOCUSING" -> {
+                        FocusTimerManager.setFocusPhase(true)
+                        val elapsedSeconds = ((activeTimer.accumulatedFocusMs + (System.currentTimeMillis() - activeTimer.startTimeMs)) / 1000).toInt()
+                        
+                        if (isStopwatch) {
+                            // Mirror active stopwatch
+                            if (FocusTimerManager.isTimerRunning.value) {
+                                FocusTimerManager.pauseTimer(context, updateButton = false)
+                            }
+                            FocusTimerManager.setAccumulatedSessionTimeMs(activeTimer.accumulatedFocusMs)
+                            FocusTimerManager.setLastResumeTimeMs(activeTimer.startTimeMs)
+                            
+                            // Check if they are already matching to avoid jitter
+                            val localSecs = FocusTimerManager.stopwatchSeconds.value
+                            if (Math.abs(localSecs - elapsedSeconds) > 3) {
+                                FocusTimerManager.setStopwatchSeconds(elapsedSeconds)
+                            }
+                            if (!FocusTimerManager.isStopwatchActive.value) {
+                                FocusTimerManager.startStopwatch(context, stopActiveAlarm = false)
+                            }
+                        } else {
+                            // Mirror active pomodoro timer
+                            if (FocusTimerManager.isStopwatchActive.value) {
+                                FocusTimerManager.pauseStopwatch(context, stopActiveAlarm = false, updateButton = false)
+                            }
+                            FocusTimerManager.setAccumulatedSessionTimeMs(activeTimer.accumulatedFocusMs)
+                            FocusTimerManager.setLastResumeTimeMs(activeTimer.startTimeMs)
+                            
+                            val timerDurationSecs = FocusTimerManager.timerDurationMinutes.value * 60
+                            val secondsLeft = (timerDurationSecs - elapsedSeconds).coerceAtLeast(0)
+                            
+                            val localLeft = FocusTimerManager.timerSecondsLeft.value
+                            if (Math.abs(localLeft - secondsLeft) > 3) {
+                                FocusTimerManager.setTimerSecondsLeft(secondsLeft)
+                            }
+                            if (!FocusTimerManager.isTimerRunning.value) {
+                                FocusTimerManager.startTimer(context, stopActiveAlarm = false, updateButton = false, forceFocusTab = false)
+                            }
                         }
+                    }
+                    "BREAK" -> {
+                        FocusTimerManager.setFocusPhase(false)
+                        val elapsedSeconds = ((activeTimer.accumulatedBreakMs + (System.currentTimeMillis() - activeTimer.startTimeMs)) / 1000).toInt()
+                        
+                        val breakDurationMins = if (isStopwatch) {
+                            FocusTimerManager.stopwatchBreakDurationMinutes.value
+                        } else {
+                            prefs.getInt("break_duration", 5)
+                        }
+                        val breakDurationSecs = breakDurationMins * 60
+                        val secondsLeft = (breakDurationSecs - elapsedSeconds).coerceAtLeast(0)
+                        
                         if (FocusTimerManager.isStopwatchActive.value) {
-                            FocusTimerManager.pauseStopwatch(context)
+                            FocusTimerManager.pauseStopwatch(context, stopActiveAlarm = false, updateButton = false)
                         }
-                    } else {
-                        // idle, break, or other -> Reset/End
-                        if (FocusTimerManager.isTimerRunning.value) {
-                            FocusTimerManager.resetTimer(context, saveSession = false)
+                        FocusTimerManager.setAccumulatedSessionTimeMs(activeTimer.accumulatedBreakMs)
+                        FocusTimerManager.setLastResumeTimeMs(activeTimer.startTimeMs)
+                        
+                        val localLeft = FocusTimerManager.timerSecondsLeft.value
+                        if (Math.abs(localLeft - secondsLeft) > 3) {
+                            FocusTimerManager.setTimerSecondsLeft(secondsLeft)
                         }
-                        if (FocusTimerManager.isStopwatchActive.value) {
-                            FocusTimerManager.resetStopwatch(context, saveSession = false)
+                        if (!FocusTimerManager.isTimerRunning.value) {
+                            FocusTimerManager.startTimer(context, stopActiveAlarm = false, updateButton = false, forceFocusTab = false)
+                        }
+                    }
+                    "PAUSED" -> {
+                        if (isStopwatch) {
+                            val elapsedSeconds = (activeTimer.accumulatedFocusMs / 1000).toInt()
+                            FocusTimerManager.setAccumulatedSessionTimeMs(activeTimer.accumulatedFocusMs)
+                            FocusTimerManager.setStopwatchSeconds(elapsedSeconds)
+                            if (FocusTimerManager.isStopwatchActive.value) {
+                                FocusTimerManager.pauseStopwatch(context, stopActiveAlarm = false, updateButton = false)
+                            }
+                        } else {
+                            val elapsedSeconds = (activeTimer.accumulatedFocusMs / 1000).toInt()
+                            val timerDurationSecs = FocusTimerManager.timerDurationMinutes.value * 60
+                            val secondsLeft = (timerDurationSecs - elapsedSeconds).coerceAtLeast(0)
+                            FocusTimerManager.setAccumulatedSessionTimeMs(activeTimer.accumulatedFocusMs)
+                            FocusTimerManager.setTimerSecondsLeft(secondsLeft)
+                            if (FocusTimerManager.isTimerRunning.value) {
+                                FocusTimerManager.pauseTimer(context, updateButton = false)
+                            }
                         }
                     }
                 }
@@ -2431,6 +2316,7 @@ class AppViewModel(application: Application, private val repository: LocalReposi
     fun updateTimerDuration(mins: Int) {
         _focusTimerDurationMins.value = mins
         prefs.edit().putInt("timer_duration", mins).apply()
+        FocusTimerManager.setTimerDuration(getApplication(), mins)
     }
 
     fun updateBreakDuration(mins: Int) {
@@ -2479,6 +2365,18 @@ class AppViewModel(application: Application, private val repository: LocalReposi
 
     fun setShowHistoryScreen(show: Boolean) {
         _showHistoryScreen.value = show
+        if (show) {
+            val username = _currentUsername.value
+            if (!username.isNullOrEmpty()) {
+                viewModelScope.launch {
+                    try {
+                        repository.syncMissingHistoryLogs(username, 0L)
+                    } catch (e: Exception) {
+                        android.util.Log.e("AppViewModel", "Failed to sync history logs on open", e)
+                    }
+                }
+            }
+        }
     }
 
     // Habits History Dialog State
@@ -3085,9 +2983,8 @@ class AppViewModel(application: Application, private val repository: LocalReposi
 
         try {
             val context = getApplication<android.app.Application>()
-            com.example.api.FirebaseSyncManager.listenToActiveTimer(context, username)
-            com.example.api.FirebaseSyncManager.listenToTodayStats(context, username)
-            android.util.Log.i("AppViewModel", "Successfully registered isolated real-time listeners on /users/$username/active_timer and /users/$username/today_stats.")
+            com.example.api.FirebaseSyncManager.listenToStatsDashboard(context, username)
+            android.util.Log.i("AppViewModel", "Successfully registered isolated real-time listener on /users/$username/stats_dashboard.")
         } catch (e: Exception) {
             android.util.Log.e("AppViewModel", "Failed to start real-time own user sync: ${e.message}", e)
         }
@@ -3115,6 +3012,7 @@ class AppViewModel(application: Application, private val repository: LocalReposi
         viewModelScope.launch {
             try {
                 val context = getApplication<android.app.Application>()
+                com.example.api.FirebaseSyncManager.fetchUserProfile(context, username)
                 val timer = com.example.api.FirebaseSyncManager.fetchActiveTimer(context, username)
                 com.example.api.FirebaseSyncManager.fetchTodayStats(context, username)
                 
@@ -3998,6 +3896,8 @@ class AppViewModel(application: Application, private val repository: LocalReposi
     val stopwatchBreakDurationMinutes: StateFlow<Int> = FocusTimerManager.stopwatchBreakDurationMinutes
     val autoStartStopwatchAfterBreak: StateFlow<Boolean> = FocusTimerManager.autoStartStopwatchAfterBreak
     val wasStartedFromStopwatch: StateFlow<Boolean> = FocusTimerManager.wasStartedFromStopwatch
+    val isTimerSyncInProgress: StateFlow<Boolean> = FocusTimerManager.isTimerSyncInProgress
+    val lastButtonClicked: StateFlow<String?> = FocusTimerManager.lastButtonClicked
 
     fun setStopwatchBreakDuration(mins: Int) {
         FocusTimerManager.setStopwatchBreakDuration(getApplication(), mins)
@@ -4117,6 +4017,16 @@ class AppViewModel(application: Application, private val repository: LocalReposi
         val totalTodayFocusedSeconds = completedTodaySeconds + pendingReviewSeconds + activeSessionSeconds
         val todayRecords = FocusTimerManager.focusRecords.value.filter { it.dateString == todayStr || it.dateString.isEmpty() }
 
+        val activeTimerState = com.example.api.ActiveTimer(
+            status = if (!isFocusPhase) "BREAK" else if (isTimerActive || isSwActive) "FOCUSING" else if (cumSecs > 0 || swSecs > 0) "PAUSED" else "RELAXING",
+            mode = if (isSwActive) "STOPWATCH" else "POMODORO",
+            startTimeMs = if (isFocusing) FocusTimerManager.lastResumeTimeMs.value ?: System.currentTimeMillis() else 0L,
+            targetEndTimeMs = if (isTimerActive && !isSwActive) (FocusTimerManager.lastResumeTimeMs.value ?: System.currentTimeMillis()) + (FocusTimerManager.timerSecondsLeft.value * 1000L) else 0L,
+            accumulatedFocusMs = if (isFocusPhase) FocusTimerManager.accumulatedSessionTimeMs.value else 0L,
+            accumulatedBreakMs = if (!isFocusPhase) FocusTimerManager.accumulatedSessionTimeMs.value else 0L,
+            timezoneOffsetMinutes = java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / (60 * 1000)
+        )
+
         val updatedUser = if (_shareFocusDetailsEnabled.value) {
             baseUser.copy(
                 isFocusing = isFocusing,
@@ -4124,13 +4034,14 @@ class AppViewModel(application: Application, private val repository: LocalReposi
                 lastResumeTimeMs = if (isFocusing) FocusTimerManager.lastResumeTimeMs.value else null,
                 currentTaskTitle = if (isFocusing) currentTaskTitle else null,
                 currentTag = if (isFocusing) currentTag else null,
-                todaysFocusRecords = if (_shareFocusHistoryEnabled.value) todayRecords else null,
+                todaysFocusRecords = null,
                 isStopwatchMode = isSwActive,
                 lastUpdatedTimestamp = ts,
-                lastButtonClicked = buttonName,
-                lastButtonClickedTimestamp = ts,
+                lastButtonClicked = null,
+                lastButtonClickedTimestamp = null,
                 focusStatus = focusStatus,
-                lastUpdatedDeviceId = FocusTimerManager.getOrCreateDeviceId(getApplication())
+                lastUpdatedDeviceId = FocusTimerManager.getOrCreateDeviceId(getApplication()),
+                activeTimer = activeTimerState
             )
         } else {
             baseUser.copy(
@@ -4142,10 +4053,11 @@ class AppViewModel(application: Application, private val repository: LocalReposi
                 todaysFocusRecords = null,
                 isStopwatchMode = isSwActive,
                 lastUpdatedTimestamp = ts,
-                lastButtonClicked = buttonName,
-                lastButtonClickedTimestamp = ts,
+                lastButtonClicked = null,
+                lastButtonClickedTimestamp = null,
                 focusStatus = focusStatus,
-                lastUpdatedDeviceId = FocusTimerManager.getOrCreateDeviceId(getApplication())
+                lastUpdatedDeviceId = FocusTimerManager.getOrCreateDeviceId(getApplication()),
+                activeTimer = activeTimerState
             )
         }
 
@@ -4452,8 +4364,7 @@ class AppViewModel(application: Application, private val repository: LocalReposi
     private val _healthRecordForSelectedDate = MutableStateFlow<HealthRecord?>(null)
     val healthRecordForSelectedDate: StateFlow<HealthRecord?> = _healthRecordForSelectedDate.asStateFlow()
 
-    private val _googleFitSyncStatus = MutableStateFlow<String>("Not Connected")
-    val googleFitSyncStatus: StateFlow<String> = _googleFitSyncStatus.asStateFlow()
+
 
     init {
         viewModelScope.launch {
@@ -4515,57 +4426,7 @@ class AppViewModel(application: Application, private val repository: LocalReposi
         }
     }
 
-    fun connectAndSyncGoogleFit(context: android.content.Context) {
-        viewModelScope.launch {
-            _googleFitSyncStatus.value = "Connecting to Google Fit REST API..."
-            try {
-                // Request access token
-                val token = com.example.util.GoogleFitSyncManager.getAccessToken(context)
-                if (token != null) {
-                    _googleFitSyncStatus.value = "Authenticating Fitness scopes..."
-                    val syncResult = syncWithGoogleFitAPI(token)
-                    if (syncResult) {
-                        _googleFitSyncStatus.value = "Synced with Google Fit successfully"
-                        val date = getCurrentDateString()
-                        val current = repository.getHealthRecordDirect(date) ?: HealthRecord(dateString = date)
-                        repository.insertOrUpdateHealthRecord(current.copy(
-                            steps = current.steps + (1200..2500).random(), // Add synchronized steps
-                            isSynced = true
-                        ))
-                    } else {
-                        _googleFitSyncStatus.value = "Synced with offline Health Connect sensors."
-                    }
-                } else {
-                    _googleFitSyncStatus.value = "Authentication Failed. Please sign in to Google first."
-                }
-            } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Exception) {
-                _googleFitSyncStatus.value = "Fit sync failed: ${e.localizedMessage}"
-            }
-        }
-    }
 
-    private suspend fun syncWithGoogleFitAPI(token: String): Boolean = withContext(Dispatchers.IO) {
-        try {
-            val client = okhttp3.OkHttpClient()
-            val request = okhttp3.Request.Builder()
-                .url("https://www.googleapis.com/fitness/v1/users/me/datasetSources")
-                .addHeader("Authorization", "Bearer $token")
-                .build()
-            
-            client.newCall(request).execute().use { response ->
-                val code = response.code
-                android.util.Log.d("GoogleFitSync", "Google Fit API response code: $code")
-                return@withContext response.isSuccessful
-            }
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            android.util.Log.e("GoogleFitSync", "Failed to contact Google Fit API", e)
-            return@withContext false
-        }
-    }
 
     private fun extractUrl(text: String): String? {
         val regex = "(https?://[a-zA-Z0-9\\-._~:/?#\\[\\]@!$&'()*+,;=]+)".toRegex()
@@ -7609,8 +7470,7 @@ class AppViewModel(application: Application, private val repository: LocalReposi
             }
 
             // Re-attach live listeners
-            com.example.api.FirebaseSyncManager.listenToActiveTimer(context, username)
-            com.example.api.FirebaseSyncManager.listenToTodayStats(context, username)
+            com.example.api.FirebaseSyncManager.listenToStatsDashboard(context, username)
         }
     }
 }

@@ -162,6 +162,7 @@ class MainActivity : ComponentActivity() {
 
             // Schedule the background periodic history sync worker
             com.example.receiver.HistorySyncWorker.schedule(applicationContext)
+            com.example.receiver.HistoryScheduledSyncReceiver.scheduleSyncAlarms(applicationContext)
 
             // Initialize local Room Database with destructive migration allowance to prevent upgrade crashes
             lifecycleScope.launch {
@@ -1469,6 +1470,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @android.annotation.SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
         val keyCode = event.keyCode
         val action = event.action

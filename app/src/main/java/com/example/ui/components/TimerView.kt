@@ -150,6 +150,8 @@ fun TimerView(viewModel: AppViewModel, modifier: Modifier = Modifier) {
     val isStopwatchActive by viewModel.isStopwatchActive.collectAsStateWithLifecycle()
     val pendingFocusReview by viewModel.pendingFocusReview.collectAsStateWithLifecycle()
     val cumulativeSessionFocusSeconds by viewModel.cumulativeSessionFocusSeconds.collectAsStateWithLifecycle()
+    val isTimerSyncInProgress by viewModel.isTimerSyncInProgress.collectAsStateWithLifecycle()
+    val lastButtonClicked by viewModel.lastButtonClicked.collectAsStateWithLifecycle()
 
     // Milestone & Dialog States
     val focusRankPopup by viewModel.focusRankPopup.collectAsStateWithLifecycle()
@@ -2051,11 +2053,24 @@ fun FriendsFocusPill(
 ) {
     val currentMeUsername by viewModel.currentUsername.collectAsState()
     val allUsers by viewModel.allUsers.collectAsState()
+    val isTimerActive by viewModel.isTimerRunning.collectAsState()
+    val isStopwatchActive by viewModel.isStopwatchActive.collectAsState()
+    val isMeFocusing = isTimerActive || isStopwatchActive
+    val meUser by viewModel.currentUserRemote.collectAsState()
 
-    // Filter active users who are focusing
-    val focusingUsers = allUsers.filter {
-        it.value.isFocusing == true && 
-        it.key != "admin"
+    // Filter active users who are focusing and dynamically include me if focusing locally
+    val focusingUsers = remember(allUsers, currentMeUsername, isMeFocusing, meUser) {
+        val list = allUsers.filter {
+            it.value.isFocusing == true && 
+            it.key != "admin"
+        }.toMutableMap()
+        
+        val myUsername = currentMeUsername
+        if (isMeFocusing && !myUsername.isNullOrEmpty()) {
+            val myRemoteUser = meUser ?: allUsers[myUsername] ?: com.example.api.UserRemote(emoji = "👨‍💻")
+            list[myUsername] = myRemoteUser.copy(isFocusing = true)
+        }
+        list
     }
 
     Box(
@@ -3487,6 +3502,8 @@ fun TimerImmersiveContent(
     val cumulativeSessionFocusSeconds by viewModel.cumulativeSessionFocusSeconds.collectAsStateWithLifecycle()
     val selectedTask by viewModel.attachedTask.collectAsStateWithLifecycle()
     val timerDisplayMode by viewModel.timerDisplayMode.collectAsStateWithLifecycle()
+    val isTimerSyncInProgress by viewModel.isTimerSyncInProgress.collectAsStateWithLifecycle()
+    val lastButtonClicked by viewModel.lastButtonClicked.collectAsStateWithLifecycle()
 
     val motivationalQuoteEnabled by viewModel.focusMotivationalQuoteEnabled.collectAsStateWithLifecycle()
     val quoteIntervalMins by viewModel.focusMotivationalQuoteIntervalMins.collectAsStateWithLifecycle()
@@ -3812,15 +3829,21 @@ fun TimerImmersiveContent(
 
                             // Pause / Resume Button
                             val isActive = if (isTabFocusTimerSelected) isTimerActive else isStopwatchActive
+                            val isThisSyncing = isTimerSyncInProgress && (
+                                lastButtonClicked == "pause_timer" || lastButtonClicked == "start_timer" ||
+                                lastButtonClicked == "start_stopwatch" || lastButtonClicked == "pause_stopwatch"
+                            )
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(48.dp)
                                     .bouncyClick {
-                                        if (isTabFocusTimerSelected) {
-                                            if (isActive) viewModel.pauseTimer() else viewModel.startTimer()
-                                        } else {
-                                            if (isActive) viewModel.pauseStopwatch() else viewModel.startStopwatch()
+                                        if (!isTimerSyncInProgress) {
+                                            if (isTabFocusTimerSelected) {
+                                                if (isActive) viewModel.pauseTimer() else viewModel.startTimer()
+                                            } else {
+                                                if (isActive) viewModel.pauseStopwatch() else viewModel.startStopwatch()
+                                            }
                                         }
                                     }
                                     .glassmorphicCard(
@@ -3831,7 +3854,15 @@ fun TimerImmersiveContent(
                                     ),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(if (isActive) "Pause" else "Resume", color = if (isActive) Color.White else WaterBlue, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (isThisSyncing) {
+                                        CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 1.5.dp, color = if (isActive) Color.White else WaterBlue)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(if (isActive) "Pausing..." else "Resuming...", color = if (isActive) Color.White else WaterBlue, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                    } else {
+                                        Text(if (isActive) "Pause" else "Resume", color = if (isActive) Color.White else WaterBlue, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                    }
+                                }
                             }
                             
                             // End Button
@@ -3861,15 +3892,18 @@ fun TimerImmersiveContent(
                         } else {
                             // BREAK PHASE
                             val isBreakActive = isTimerActive
+                            val isThisSyncing = isTimerSyncInProgress && (lastButtonClicked == "pause_timer" || lastButtonClicked == "start_timer")
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(48.dp)
                                     .bouncyClick {
-                                        if (isBreakActive) {
-                                            viewModel.pauseTimer()
-                                        } else {
-                                            viewModel.startTimer()
+                                        if (!isTimerSyncInProgress) {
+                                            if (isBreakActive) {
+                                                viewModel.pauseTimer()
+                                            } else {
+                                                viewModel.startTimer()
+                                            }
                                         }
                                     }
                                     .glassmorphicCard(
@@ -3880,7 +3914,15 @@ fun TimerImmersiveContent(
                                     ),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(if (isBreakActive) "Pause" else "Resume", color = if (isBreakActive) Color.White else WaterBlue, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (isThisSyncing) {
+                                        CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 1.5.dp, color = if (isBreakActive) Color.White else WaterBlue)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(if (isBreakActive) "Pausing..." else "Resuming...", color = if (isBreakActive) Color.White else WaterBlue, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    } else {
+                                        Text(if (isBreakActive) "Pause" else "Resume", color = if (isBreakActive) Color.White else WaterBlue, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    }
+                                }
                             }
 
                             // Start Focus
@@ -4192,7 +4234,7 @@ fun TimerLiveControlContent(
                             .padding(vertical = 12.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("Promodora", color = if (isTabFocusTimerSelected) Color.White else Color.Gray, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        Text("Pomodoro Mode", color = if (isTabFocusTimerSelected) Color.White else Color.Gray, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                     }
 
                     Box(
@@ -4605,6 +4647,8 @@ fun LiveControlTimerBar(
     WaterBlue: Color
 ) {
     val selectedTag by viewModel.attachedTag.collectAsState()
+    val isTimerSyncInProgress by viewModel.isTimerSyncInProgress.collectAsStateWithLifecycle()
+    val lastButtonClicked by viewModel.lastButtonClicked.collectAsStateWithLifecycle()
 
     if (isTimerActive) {
         Row(
@@ -4671,6 +4715,45 @@ fun LiveControlTimerBar(
             }
             Spacer(modifier = Modifier.height(12.dp))
 
+            // Pomodoro dynamic presets row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val presets = listOf(
+                    Triple(25, 5, "25/5 Sprint"),
+                    Triple(50, 10, "50/10 Sprint"),
+                    Triple(15, 3, "15/3 Lite")
+                )
+                presets.forEach { (fMins, bMins, label) ->
+                    val isSelected = focusTimerDurationMins == fMins
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(36.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isSelected) WaterBlue.copy(alpha = 0.18f) else Color(0xFF161616))
+                            .border(1.dp, if (isSelected) WaterBlue else Color(0xFF2E2E31), RoundedCornerShape(8.dp))
+                            .clickable {
+                                viewModel.updateTimerDuration(fMins)
+                                viewModel.updateBreakDuration(bMins)
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = label,
+                            color = if (isSelected) WaterBlue else Color.Gray,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -4703,12 +4786,19 @@ fun LiveControlTimerBar(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = WaterBlue, contentColor = Color.Black),
                     shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth().height(48.dp).testTag("start_timer_btn")
+                    modifier = Modifier.fillMaxWidth().height(48.dp).testTag("start_timer_btn"),
+                    enabled = !isTimerSyncInProgress
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = "Start Focus", modifier = Modifier.size(20.dp), tint = Color.Black)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Start Focus", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.Black)
+                        if (isTimerSyncInProgress && lastButtonClicked == "start_timer") {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.Black)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Starting...", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.Black)
+                        } else {
+                            Icon(Icons.Default.PlayArrow, contentDescription = "Start Focus", modifier = Modifier.size(20.dp), tint = Color.Black)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Start Focus", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.Black)
+                        }
                     }
                 }
             }
@@ -4743,12 +4833,19 @@ fun LiveControlTimerBar(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = WaterBlue, contentColor = Color.Black),
                     shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.weight(1f).height(48.dp)
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    enabled = !isTimerSyncInProgress
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = "Resume", tint = Color.Black, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Resume", color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        if (isTimerSyncInProgress && lastButtonClicked == "start_timer") {
+                            CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = Color.Black)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Resuming...", color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        } else {
+                            Icon(Icons.Default.PlayArrow, contentDescription = "Resume", tint = Color.Black, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Resume", color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
 
@@ -4809,21 +4906,31 @@ fun LiveControlBreakBar(
                 }
             }
         } else {
+            val isTimerSyncInProgress by viewModel.isTimerSyncInProgress.collectAsStateWithLifecycle()
+            val lastButtonClicked by viewModel.lastButtonClicked.collectAsStateWithLifecycle()
             val onClickAction = if (isTimerActive) { { viewModel.pauseTimer() } } else { { viewModel.startTimer() } }
             val btnBg = if (isTimerActive) Color.White.copy(alpha = 0.15f) else WaterBlue
             val btnFg = if (isTimerActive) Color.White else Color.Black
             val iconRes = if (isTimerActive) Icons.Default.Pause else Icons.Default.PlayArrow
+            val isThisSyncing = isTimerSyncInProgress && (lastButtonClicked == "pause_timer" || lastButtonClicked == "start_timer")
 
             Button(
                 onClick = onClickAction,
                 colors = ButtonDefaults.buttonColors(containerColor = btnBg, contentColor = btnFg),
                 shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.weight(1f).height(48.dp)
+                modifier = Modifier.weight(1f).height(48.dp),
+                enabled = !isTimerSyncInProgress
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(iconRes, contentDescription = "Toggle", tint = btnFg, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(if (isTimerActive) "Pause" else "Resume", color = btnFg, fontSize = 13.sp, fontWeight = if (isTimerActive) FontWeight.Normal else FontWeight.Bold)
+                    if (isThisSyncing) {
+                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = btnFg)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(if (isTimerActive) "Pausing..." else "Resuming...", color = btnFg, fontSize = 13.sp)
+                    } else {
+                        Icon(iconRes, contentDescription = "Toggle", tint = btnFg, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(if (isTimerActive) "Pause" else "Resume", color = btnFg, fontSize = 13.sp, fontWeight = if (isTimerActive) FontWeight.Normal else FontWeight.Bold)
+                    }
                 }
             }
         }
@@ -4886,16 +4993,26 @@ fun LiveControlStopwatchBar(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            val isTimerSyncInProgress by viewModel.isTimerSyncInProgress.collectAsStateWithLifecycle()
+            val lastButtonClicked by viewModel.lastButtonClicked.collectAsStateWithLifecycle()
+            val isThisSyncing = isTimerSyncInProgress && lastButtonClicked == "pause_stopwatch"
             Button(
                 onClick = { viewModel.pauseStopwatch() },
                 colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.15f)),
                 shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.weight(1f).height(48.dp)
+                modifier = Modifier.weight(1f).height(48.dp),
+                enabled = !isTimerSyncInProgress
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Pause, contentDescription = "Pause", tint = Color.White, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Pause", color = Color.White, fontSize = 13.sp)
+                    if (isThisSyncing) {
+                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = Color.White)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Pausing...", color = Color.White, fontSize = 13.sp)
+                    } else {
+                        Icon(Icons.Default.Pause, contentDescription = "Pause", tint = Color.White, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Pause", color = Color.White, fontSize = 13.sp)
+                    }
                 }
             }
 
@@ -4950,6 +5067,9 @@ fun LiveControlStopwatchBar(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                val isTimerSyncInProgress by viewModel.isTimerSyncInProgress.collectAsStateWithLifecycle()
+                val lastButtonClicked by viewModel.lastButtonClicked.collectAsStateWithLifecycle()
+                val isThisSyncing = isTimerSyncInProgress && lastButtonClicked == "start_stopwatch"
                 Button(
                     onClick = {
                         viewModel.setTabFocusTimerSelected(false)
@@ -4959,12 +5079,19 @@ fun LiveControlStopwatchBar(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = WaterBlue, contentColor = Color.Black),
                     shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth().height(48.dp).testTag("start_stopwatch_btn")
+                    modifier = Modifier.fillMaxWidth().height(48.dp).testTag("start_stopwatch_btn"),
+                    enabled = !isTimerSyncInProgress
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = "Start Stopwatch", modifier = Modifier.size(20.dp), tint = Color.Black)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Start Stopwatch", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.Black)
+                        if (isThisSyncing) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.Black)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Starting...", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.Black)
+                        } else {
+                            Icon(Icons.Default.PlayArrow, contentDescription = "Start Stopwatch", modifier = Modifier.size(20.dp), tint = Color.Black)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Start Stopwatch", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.Black)
+                        }
                     }
                 }
             }
@@ -4992,6 +5119,9 @@ fun LiveControlStopwatchBar(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                val isTimerSyncInProgress by viewModel.isTimerSyncInProgress.collectAsStateWithLifecycle()
+                val lastButtonClicked by viewModel.lastButtonClicked.collectAsStateWithLifecycle()
+                val isThisSyncing = isTimerSyncInProgress && lastButtonClicked == "start_stopwatch"
                 Button(
                     onClick = {
                         viewModel.startStopwatch()
@@ -4999,12 +5129,19 @@ fun LiveControlStopwatchBar(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = WaterBlue, contentColor = Color.Black),
                     shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.weight(1f).height(48.dp)
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    enabled = !isTimerSyncInProgress
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = "Resume", tint = Color.Black, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Resume", color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        if (isThisSyncing) {
+                            CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = Color.Black)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Resuming...", color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        } else {
+                            Icon(Icons.Default.PlayArrow, contentDescription = "Resume", tint = Color.Black, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Resume", color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
 

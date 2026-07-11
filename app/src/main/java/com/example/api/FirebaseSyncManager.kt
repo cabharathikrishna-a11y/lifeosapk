@@ -67,12 +67,15 @@ object FirebaseSyncManager {
                 )
             } else null
 
+            val emoji = snapshot.child("emoji").getValue(String::class.java) ?: "🎯"
+
             return UserRemote(
                 name = profile?.name,
                 nickname = profile?.nickname,
                 profile = profile,
                 activeTimer = timer,
-                todayStats = stats
+                todayStats = stats,
+                emoji = emoji
             )
         } catch (e: Exception) {
             Log.e("FirebaseSyncManager", "Failed to parse UserRemote from snapshot", e)
@@ -131,8 +134,9 @@ object FirebaseSyncManager {
                             val targetEndTimeMs = snapshot.child("targetEndTimeMs").getValue(Long::class.java) ?: 0L
                             val accumulatedFocusMs = snapshot.child("accumulatedFocusMs").getValue(Long::class.java) ?: 0L
                             val accumulatedBreakMs = snapshot.child("accumulatedBreakMs").getValue(Long::class.java) ?: 0L
+                            val timezoneOffsetMinutes = snapshot.child("timezoneOffsetMinutes").getValue(Int::class.java) ?: 0
                             
-                            val timer = ActiveTimer(status, mode, startTimeMs, targetEndTimeMs, accumulatedFocusMs, accumulatedBreakMs)
+                            val timer = ActiveTimer(status, mode, startTimeMs, targetEndTimeMs, accumulatedFocusMs, accumulatedBreakMs, timezoneOffsetMinutes)
                             FirebaseRepository.updateActiveTimer(username, timer)
                             continuation.resume(timer, onCancellation = null)
                         } catch (e: Exception) {
@@ -201,9 +205,18 @@ object FirebaseSyncManager {
                     val targetEndTimeMs = snapshot.child("targetEndTimeMs").getValue(Long::class.java) ?: 0L
                     val accumulatedFocusMs = snapshot.child("accumulatedFocusMs").getValue(Long::class.java) ?: 0L
                     val accumulatedBreakMs = snapshot.child("accumulatedBreakMs").getValue(Long::class.java) ?: 0L
+                    val timezoneOffsetMinutes = snapshot.child("timezoneOffsetMinutes").getValue(Int::class.java) ?: 0
                     
-                    val timer = ActiveTimer(status, mode, startTimeMs, targetEndTimeMs, accumulatedFocusMs, accumulatedBreakMs)
-                    FirebaseRepository.updateActiveTimer(username, timer)
+                    val timer = ActiveTimer(status, mode, startTimeMs, targetEndTimeMs, accumulatedFocusMs, accumulatedBreakMs, timezoneOffsetMinutes)
+                    val prefs = context.applicationContext.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+                    val currentUsername = prefs.getString("current_username", null)
+                    val isMe = (username == currentUsername)
+
+                    if (isMe && com.example.util.FocusTimerManager.isRecentLocalInteraction()) {
+                        Log.d("FirebaseSyncManager", "Skipping active_timer repository update for current user due to recent local interaction.")
+                    } else {
+                        FirebaseRepository.updateActiveTimer(username, timer)
+                    }
                 } catch (e: Exception) {
                     Log.e("FirebaseSyncManager", "Error parsing active_timer for $username", e)
                 }
@@ -234,7 +247,15 @@ object FirebaseSyncManager {
                     val dateString = snapshot.child("dateString").getValue(String::class.java) ?: ""
                     
                     val stats = TodayStats(todayFocusTimeMs, dateString)
-                    FirebaseRepository.updateTodayStats(username, stats)
+                    val prefs = context.applicationContext.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+                    val currentUsername = prefs.getString("current_username", null)
+                    val isMe = (username == currentUsername)
+
+                    if (isMe && com.example.util.FocusTimerManager.isRecentLocalInteraction()) {
+                        Log.d("FirebaseSyncManager", "Skipping today_stats repository update for current user due to recent local interaction.")
+                    } else {
+                        FirebaseRepository.updateTodayStats(username, stats)
+                    }
                 } catch (e: Exception) {
                     Log.e("FirebaseSyncManager", "Error parsing today_stats for $username", e)
                 }
@@ -248,6 +269,56 @@ object FirebaseSyncManager {
         activeListeners["today_stats_$username"] = listener
     }
 
+    fun listenToStatsDashboard(context: Context, username: String) {
+        val db = getDatabase(context)
+        val ref = db.getReference("users").child(username).child("stats_dashboard")
+        
+        if (activeListeners.containsKey("stats_dashboard_$username")) return
+
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                if (!snapshot.exists()) {
+                    FirebaseRepository.updateActiveTimer(username, ActiveTimer())
+                    FirebaseRepository.updateTodayStats(username, TodayStats())
+                    return
+                }
+                try {
+                    val status = snapshot.child("status").getValue(String::class.java) ?: "RELAXING"
+                    val mode = snapshot.child("mode").getValue(String::class.java) ?: "POMODORO"
+                    val startTimeMs = snapshot.child("startTimeMs").getValue(Long::class.java) ?: 0L
+                    val targetEndTimeMs = snapshot.child("targetEndTimeMs").getValue(Long::class.java) ?: 0L
+                    val accumulatedFocusMs = snapshot.child("accumulatedFocusMs").getValue(Long::class.java) ?: 0L
+                    val accumulatedBreakMs = snapshot.child("accumulatedBreakMs").getValue(Long::class.java) ?: 0L
+                    
+                    val todayFocusTimeMs = snapshot.child("todayFocusTimeMs").getValue(Long::class.java) ?: 0L
+                    val dateString = snapshot.child("dateString").getValue(String::class.java) ?: ""
+
+                    val timer = ActiveTimer(status, mode, startTimeMs, targetEndTimeMs, accumulatedFocusMs, accumulatedBreakMs)
+                    val stats = TodayStats(todayFocusTimeMs, dateString)
+
+                    val prefs = context.applicationContext.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+                    val currentUsername = prefs.getString("current_username", null)
+                    val isMe = (username == currentUsername)
+
+                    if (isMe && com.example.util.FocusTimerManager.isRecentLocalInteraction()) {
+                        Log.d("FirebaseSyncManager", "Skipping stats_dashboard repository update for current user due to recent local interaction.")
+                    } else {
+                        FirebaseRepository.updateActiveTimer(username, timer)
+                        FirebaseRepository.updateTodayStats(username, stats)
+                    }
+                } catch (e: Exception) {
+                    Log.e("FirebaseSyncManager", "Error parsing stats_dashboard for $username", e)
+                }
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                Log.e("FirebaseSyncManager", "StatsDashboard listener cancelled for $username", error.toException())
+            }
+        }
+        ref.addValueEventListener(listener)
+        activeListeners["stats_dashboard_$username"] = listener
+    }
+
     fun stopListening(context: Context) {
         val db = getDatabase(context)
         activeListeners.forEach { (key, listener) ->
@@ -257,6 +328,9 @@ object FirebaseSyncManager {
             } else if (key.startsWith("today_stats_")) {
                 val username = key.removePrefix("today_stats_")
                 db.getReference("users").child(username).child("today_stats").removeEventListener(listener)
+            } else if (key.startsWith("stats_dashboard_")) {
+                val username = key.removePrefix("stats_dashboard_")
+                db.getReference("users").child(username).child("stats_dashboard").removeEventListener(listener)
             }
         }
         activeListeners.clear()

@@ -85,7 +85,6 @@ import com.example.util.AppLockHelper
 import com.example.util.AppUpdateManager
 import com.example.util.GoogleContactsSyncManager
 import com.example.util.GoogleDriveSyncManager
-import com.example.util.GoogleFitSyncManager
 import com.example.util.GoogleTasksSyncManager
 import com.example.util.MapDownloadManager
 import com.example.util.UpdateStatus
@@ -377,14 +376,7 @@ fun SettingsView(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                         ) { activePage = 18 }
                         HorizontalDivider(color = Color(0xFF1E1E22), thickness = 0.5.dp, modifier = Modifier.padding(start = 56.dp, end = 16.dp))
                         SettingsRowItem(
-                            title = "18. GOOGLE FIT SYNC",
-                            subtitle = "Synchronize activity data directly with your Google Fit account",
-                            icon = Icons.Default.DirectionsWalk,
-                            iconBgColor = Color(0xFFFFA726)
-                        ) { activePage = 20 }
-                        HorizontalDivider(color = Color(0xFF1E1E22), thickness = 0.5.dp, modifier = Modifier.padding(start = 56.dp, end = 16.dp))
-                        SettingsRowItem(
-                            title = "19. RECOMPOSE FIREBASE",
+                            title = "18. RECOMPOSE FIREBASE",
                             subtitle = "Clean database, delete non-Google registered user nodes, and verify structure",
                             icon = Icons.Default.Refresh,
                             iconBgColor = Color(0xFF00796B)
@@ -563,12 +555,7 @@ fun SettingsView(viewModel: AppViewModel, modifier: Modifier = Modifier) {
             )
         }
 
-        20 -> {
-            SettingsFitnessSyncTrendsPage(
-                viewModel = viewModel,
-                onBack = { activePage = 0 }
-            )
-        }
+
 
         21 -> {
             SettingsSubpageWorkspace(
@@ -584,7 +571,8 @@ fun SettingsView(viewModel: AppViewModel, modifier: Modifier = Modifier) {
             SettingsSubpageWorkspace(
                 title = "Recompose Firebase Database",
                 description = "Verify data structure and clean up non-Google registered user nodes.",
-                onBack = { activePage = 0 }
+                onBack = { activePage = 0 },
+                scrollable = false
             ) {
                 SettingsRecomposeFirebasePage(viewModel = viewModel)
             }
@@ -719,6 +707,7 @@ fun SettingsSubpageWorkspace(
     title: String,
     description: String,
     onBack: () -> Unit,
+    scrollable: Boolean = true,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Column(
@@ -761,7 +750,7 @@ fun SettingsSubpageWorkspace(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
+                .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             content = content
         )
@@ -1197,15 +1186,13 @@ fun SettingsSleepWakePage(viewModel: AppViewModel) {
         }
     }
 
-    LazyColumn(
+    Column(
         modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
+            .fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // Bedtime Reminder Card
-        item {
-            Card(
+        Card(
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF0D0D11)),
                 border = BorderStroke(1.dp, Color(0xFF222225)),
                 shape = RoundedCornerShape(12.dp),
@@ -1286,11 +1273,9 @@ fun SettingsSleepWakePage(viewModel: AppViewModel) {
                     }
                 }
             }
-        }
 
         // Morning Wake-up Alarm Card
-        item {
-            Card(
+        Card(
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF0D0D11)),
                 border = BorderStroke(1.dp, Color(0xFF222225)),
                 shape = RoundedCornerShape(12.dp),
@@ -1371,11 +1356,9 @@ fun SettingsSleepWakePage(viewModel: AppViewModel) {
                     }
                 }
             }
-        }
 
         // Alarm Logs / Statistics Card
-        item {
-            Card(
+        Card(
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF0D0D11)),
                 border = BorderStroke(1.dp, Color(0xFF222225)),
                 shape = RoundedCornerShape(12.dp),
@@ -1412,7 +1395,6 @@ fun SettingsSleepWakePage(viewModel: AppViewModel) {
                     }
                 }
             }
-        }
     }
 }
 
@@ -7069,86 +7051,7 @@ fun SettingsFinancialsPage(
 }
 
 // ==========================================================
-// MERGED FROM: SettingsView_Fitness.kt
-// ==========================================================
 
-
-
-@Composable
-fun SettingsFitnessSyncTrendsPage(
-    viewModel: AppViewModel,
-    onBack: () -> Unit
-) {
-    val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
-    val googleFitSyncStatus by viewModel.googleFitSyncStatus.collectAsStateWithLifecycle()
-    
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black)
-    ) {
-        // Subpage Header
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    tint = Color.White
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Column {
-                Text(
-                    text = "GOOGLE FIT SYNC",
-                    color = Color.White,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = 0.5.sp
-                )
-                Text(
-                    text = "Synchronize activity data directly with your Google Fit account",
-                    color = Color.Gray,
-                    fontSize = 10.sp,
-                    maxLines = 1
-                )
-            }
-        }
-        
-        HorizontalDivider(color = Color(0xFF1A1A1E), thickness = 1.dp)
-
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            GoogleSyncTab(
-                statusMessage = googleFitSyncStatus,
-                onConnectFit = {
-                    viewModel.connectAndSyncGoogleFit(context)
-                },
-                onClearCache = {
-                    coroutineScope.launch {
-                        viewModel.updateHealthMetric(
-                            steps = 0,
-                            sleepMinutes = 0,
-                            waterMl = 0,
-                            caloriesBurned = 0,
-                            activeMinutes = 0
-                        )
-                        Toast.makeText(context, "Local metrics reset to baseline.", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            )
-        }
-    }
-}
 
 // ==========================================================
 // MERGED FROM: SettingsView_General.kt
@@ -8266,7 +8169,6 @@ fun PermissionsSettingsSection(viewModel: AppViewModel) {
     var hasDrivePermission by remember { mutableStateOf(false) }
     var hasGoogleContactsPermission by remember { mutableStateOf(false) }
     var hasGoogleTasksPermission by remember { mutableStateOf(false) }
-    var hasGoogleFitPermission by remember { mutableStateOf(false) }
     
     var hasExactAlarmPermission by remember { mutableStateOf(false) }
     var hasNotificationListenerPermission by remember { mutableStateOf(false) }
@@ -8297,7 +8199,6 @@ fun PermissionsSettingsSection(viewModel: AppViewModel) {
         hasDrivePermission = GoogleDriveSyncManager.hasDrivePermission(context)
         hasGoogleContactsPermission = hasGoogleScope(context, "https://www.googleapis.com/auth/contacts")
         hasGoogleTasksPermission = hasGoogleScope(context, "https://www.googleapis.com/auth/tasks")
-        hasGoogleFitPermission = GoogleFitSyncManager.hasFitPermission(context)
 
         hasExactAlarmPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
@@ -8484,21 +8385,6 @@ fun PermissionsSettingsSection(viewModel: AppViewModel) {
                 if (!hasGoogleTasksPermission) {
                     scope.launch {
                         GoogleTasksSyncManager.getAccessToken(context) { intent ->
-                            authResolutionLauncher.launch(intent)
-                        }
-                    }
-                }
-            }
-        )
-        
-        PermissionItem(
-            title = "Google Fit",
-            description = "Sync with Google Fit API for health data.",
-            isGranted = hasGoogleFitPermission,
-            onClick = {
-                if (!hasGoogleFitPermission) {
-                    scope.launch {
-                        GoogleFitSyncManager.getAccessToken(context) { intent ->
                             authResolutionLauncher.launch(intent)
                         }
                     }

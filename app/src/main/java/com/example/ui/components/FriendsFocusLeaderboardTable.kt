@@ -106,7 +106,11 @@ fun FriendsFocusLeaderboardTable(
                 emoji = currentUserRemote?.emoji ?: "👨‍💻",
                 focusedSeconds = run {
                     val meUser = allUsers[meUsername] ?: currentUserRemote
-                    val baseMs = meUser?.todayStats?.todayFocusTimeMs ?: (myTodaySeconds * 1000L)
+                    val baseMs = if (meUser?.todayStats?.dateString == selectedDateStr || meUser?.todayStats?.dateString.isNullOrEmpty()) {
+                        meUser?.todayStats?.todayFocusTimeMs ?: 0L
+                    } else {
+                        0L
+                    }
                     val liveDeltaMs = meUser?.activeTimer?.let { activeTimer ->
                         when (activeTimer.status) {
                             "FOCUSING" -> {
@@ -130,7 +134,11 @@ fun FriendsFocusLeaderboardTable(
             val livePeers = peerList.map { entry ->
                 val u = entry.value
                 val nameToShow = u.nickname ?: u.name ?: entry.key
-                val baseMs = u.todayStats?.todayFocusTimeMs ?: 0L
+                val baseMs = if (u.todayStats?.dateString == selectedDateStr || u.todayStats?.dateString.isNullOrEmpty()) {
+                    u.todayStats?.todayFocusTimeMs ?: 0L
+                } else {
+                    0L
+                }
                 val liveDeltaMs = u.activeTimer?.let { activeTimer ->
                     when (activeTimer.status) {
                         "FOCUSING" -> {

@@ -31,6 +31,7 @@ data class UserRemote(
     val profile: UserProfile? = null,
     val activeTimer: ActiveTimer? = null,
     val todayStats: TodayStats? = null,
+    val stats_dashboard: StatsDashboard? = null,
     val lastUpdatedTimestamp: Long? = null,
     val lastButtonClicked: String? = null,
     val lastButtonClickedTimestamp: Long? = null,
@@ -59,11 +60,24 @@ data class ActiveTimer(
     val startTimeMs: Long = 0L,
     val targetEndTimeMs: Long = 0L,
     val accumulatedFocusMs: Long = 0L,
-    val accumulatedBreakMs: Long = 0L
+    val accumulatedBreakMs: Long = 0L,
+    val timezoneOffsetMinutes: Int = 0
 )
 
 @JsonClass(generateAdapter = true)
 data class TodayStats(
+    val todayFocusTimeMs: Long = 0L,
+    val dateString: String = ""
+)
+
+@JsonClass(generateAdapter = true)
+data class StatsDashboard(
+    val status: String = "RELAXING",
+    val mode: String = "POMODORO",
+    val startTimeMs: Long = 0L,
+    val targetEndTimeMs: Long = 0L,
+    val accumulatedFocusMs: Long = 0L,
+    val accumulatedBreakMs: Long = 0L,
     val todayFocusTimeMs: Long = 0L,
     val dateString: String = ""
 )
@@ -294,6 +308,20 @@ class InterceptingFirebaseApi(
         userWithVersion.todayStats?.let { s ->
             userMap["today_stats"] = mapOf("todayFocusTimeMs" to s.todayFocusTimeMs, "dateString" to s.dateString)
         }
+
+        // Keep stats_dashboard aligned
+        val t = userWithVersion.activeTimer ?: ActiveTimer()
+        val s = userWithVersion.todayStats ?: TodayStats()
+        userMap["stats_dashboard"] = mapOf(
+            "status" to t.status,
+            "mode" to t.mode,
+            "startTimeMs" to t.startTimeMs,
+            "targetEndTimeMs" to t.targetEndTimeMs,
+            "accumulatedFocusMs" to t.accumulatedFocusMs,
+            "accumulatedBreakMs" to t.accumulatedBreakMs,
+            "todayFocusTimeMs" to s.todayFocusTimeMs,
+            "dateString" to s.dateString
+        )
 
         return kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
             getDatabase().getReference("users").child(username).setValue(userMap)

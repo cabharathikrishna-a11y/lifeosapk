@@ -323,6 +323,9 @@ interface FocusRecordDao {
     @Query("SELECT * FROM focus_records ORDER BY timestamp DESC")
     fun getAllRecords(): Flow<List<FocusRecordEntity>>
 
+    @Query("SELECT * FROM focus_records")
+    suspend fun getAllRecordsDirect(): List<FocusRecordEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertRecord(record: FocusRecordEntity): Long
 
@@ -335,6 +338,9 @@ interface FocusRecordDao {
     // Specific query to pull today's stats efficiently without loading all history
     @Query("SELECT * FROM focus_records WHERE dateString = :dateStr")
     suspend fun getRecordsForDate(dateStr: String): List<FocusRecordEntity>
+
+    @Query("DELETE FROM focus_records WHERE dateString = :dateStr")
+    suspend fun deleteRecordsForDate(dateStr: String)
 }
 
 @Dao

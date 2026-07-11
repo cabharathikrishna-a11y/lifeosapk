@@ -269,6 +269,10 @@ class LocalRepository(val db: AppDatabase, val context: android.content.Context)
         return focusRecordDao.getRecordsForDate(dateStr)
     }
 
+    suspend fun deleteFocusRecordsForDate(dateStr: String) = withContext(NonCancellable) {
+        focusRecordDao.deleteRecordsForDate(dateStr)
+    }
+
     // Keep Note Operations
     private val keepNoteDao = db.keepNoteDao()
 
@@ -325,6 +329,9 @@ class LocalRepository(val db: AppDatabase, val context: android.content.Context)
         // Query history logs by end time to get missing records since last sync
         val query = ref.orderByChild("endTime").startAt(lastSyncTimestamp.toDouble() + 1.0)
         
+        val existingRecords = focusRecordDao.getAllRecordsDirect()
+        val existingKeys = existingRecords.map { "${it.timestamp}_${it.startTime}_${it.endTime}" }.toSet()
+
         withContext(Dispatchers.IO) {
             kotlinx.coroutines.suspendCancellableCoroutine<Unit> { continuation ->
                 query.addListenerForSingleValueEvent(object : com.google.firebase.database.ValueEventListener {
@@ -343,6 +350,11 @@ class LocalRepository(val db: AppDatabase, val context: android.content.Context)
                                     val endTime = child.child("endTime").getValue(String::class.java) ?: ""
                                     val timestamp = child.child("timestamp").getValue(Long::class.java) ?: System.currentTimeMillis()
                                     
+                                    val key = "${timestamp}_${startTime}_${endTime}"
+                                    if (existingKeys.contains(key)) {
+                                        return@forEach
+                                    }
+
                                     recordsToInsert.add(
                                         FocusRecordEntity(
                                             taskTitle = taskTitle,

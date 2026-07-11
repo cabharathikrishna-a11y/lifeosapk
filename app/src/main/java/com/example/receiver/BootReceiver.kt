@@ -27,6 +27,7 @@ class BootReceiver : BroadcastReceiver() {
             if (prefs.getBoolean("keep_notification_enabled", true)) {
                 com.example.service.KeepAliveService.start(context)
             }
+            com.example.receiver.HistoryScheduledSyncReceiver.scheduleSyncAlarms(context)
 
             try {
                 Log.d("BootReceiver", "Enqueueing BootRescheduleWorker using WorkManager")
