@@ -180,12 +180,14 @@ object FocusTimerManager {
 
                                     val activeTimerState = com.example.api.ActiveTimer(
                                         status = if (!isFocus) "BREAK" else if (isTimerRunning.value || isStopwatchActive.value) "FOCUSING" else if (accumulatedSessionTimeMs.value > 0) "PAUSED" else "RELAXING",
-                                        mode = if (isSwActive) "STOPWATCH" else "POMODORO",
+                                        mode = if (isSwActive || wasStartedFromStopwatch.value) "STOPWATCH" else "POMODORO",
                                         startTimeMs = if (isRunning) lastResumeTimeMs.value ?: System.currentTimeMillis() else 0L,
                                         targetEndTimeMs = if (isTimerRunning.value && !isSwActive) (lastResumeTimeMs.value ?: System.currentTimeMillis()) + (timerSecondsLeft.value * 1000L) else 0L,
                                         accumulatedFocusMs = if (isFocus) accumulatedSessionTimeMs.value else 0L,
                                         accumulatedBreakMs = if (!isFocus) accumulatedSessionTimeMs.value else 0L,
-                                        timezoneOffsetMinutes = java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / (60 * 1000)
+                                        timezoneOffsetMinutes = java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / (60 * 1000),
+                                        taskTitle = if (isFocus) attachedTaskTitle else null,
+                                        tag = if (isFocus) attachedTag.value.takeIf { it.isNotEmpty() } else null
                                     )
 
                                     val updatedUser = baseUser.copy(
@@ -195,7 +197,7 @@ object FocusTimerManager {
                                         focusStatus = focusStatus,
                                         currentTaskTitle = if (isFocus) attachedTaskTitle else null,
                                         todaysFocusRecords = null,
-                                        isStopwatchMode = isSwActive,
+                                        isStopwatchMode = isSwActive || wasStartedFromStopwatch.value,
                                         lastUpdatedTimestamp = System.currentTimeMillis(),
                                         lastUpdatedDeviceId = getOrCreateDeviceId(context),
                                         lastButtonClicked = null,
@@ -1063,6 +1065,7 @@ object FocusTimerManager {
         _stopwatchBreakDurationMinutes.value = mins
         val prefs = context.applicationContext.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
         prefs.edit().putInt("stopwatch_break_duration", mins).apply()
+        pushTimerSettingsToFirebase(context)
     }
 
     fun setAutoStartStopwatchAfterBreak(context: Context, enabled: Boolean) {
@@ -1070,6 +1073,7 @@ object FocusTimerManager {
         _autoStartStopwatchAfterBreak.value = enabled
         val prefs = context.applicationContext.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
         prefs.edit().putBoolean("stopwatch_autostart_after_break", enabled).apply()
+        pushTimerSettingsToFirebase(context)
     }
 
     fun stopAlarm() {
@@ -1248,12 +1252,14 @@ object FocusTimerManager {
         _autoStartBreak.value = enabled
         val prefs = context.applicationContext.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
         prefs.edit().putBoolean("timer_autostart_break", enabled).apply()
+        pushTimerSettingsToFirebase(context)
     }
 
     fun setAutoStartPomo(context: Context, enabled: Boolean) {
         _autoStartPomo.value = enabled
         val prefs = context.applicationContext.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
         prefs.edit().putBoolean("timer_autostart_pomo", enabled).apply()
+        pushTimerSettingsToFirebase(context)
     }
 
     fun setTimerDuration(context: Context, mins: Int) {
@@ -1264,6 +1270,7 @@ object FocusTimerManager {
         }
         val prefs = context.applicationContext.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
         prefs.edit().putInt("timer_duration", mins).apply()
+        pushTimerSettingsToFirebase(context)
     }
 
     fun attachTaskToTimer(context: Context, task: Task?) {
@@ -1319,9 +1326,9 @@ object FocusTimerManager {
                     val currentSessionSecs = _cumulativeSessionFocusSeconds.value
                     if (currentSessionSecs >= 21600) { // 6 hours
                         launch(Dispatchers.Main) {
-                            Toast.makeText(appContext, "⚠️ Session focus limit of 6 hours reached! Timer paused.", Toast.LENGTH_LONG).show()
+                            Toast.makeText(appContext, "⚠️ Session focus limit of 6 hours reached! Session completed and logged.", Toast.LENGTH_LONG).show()
                         }
-                        pauseTimer(appContext)
+                        resetTimer(appContext, saveSession = true)
                         break
                     }
 
@@ -1584,7 +1591,9 @@ object FocusTimerManager {
                                         targetEndTimeMs = 0L,
                                         accumulatedFocusMs = elapsedSecs * 1000L,
                                         accumulatedBreakMs = 0L,
-                                        timezoneOffsetMinutes = java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / (60 * 1000)
+                                        timezoneOffsetMinutes = java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / (60 * 1000),
+                                        taskTitle = _attachedTask.value?.title,
+                                        tag = _attachedTag.value.takeIf { it.isNotEmpty() }
                                     )
                                     val updatedUser = baseUser.copy(
                                         isFocusing = false,
@@ -1787,9 +1796,9 @@ object FocusTimerManager {
                 val currentSessionSecs = _stopwatchSeconds.value
                 if (currentSessionSecs >= 21600) { // 6 hours limit
                     launch(Dispatchers.Main) {
-                        Toast.makeText(appContext, "⚠️ Session focus limit of 6 hours reached! Stopwatch paused.", Toast.LENGTH_LONG).show()
+                        Toast.makeText(appContext, "⚠️ Session focus limit of 6 hours reached! Session completed and logged.", Toast.LENGTH_LONG).show()
                     }
-                    pauseStopwatch(appContext, stopActiveAlarm = false)
+                    resetStopwatch(appContext, saveSession = true)
                     break
                 }
 
@@ -2995,5 +3004,54 @@ object FocusTimerManager {
         val prefs = context.applicationContext.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
         prefs.edit().putString("focus_tags_list", tags.joinToString(",")).apply()
         _focusTags.value = tags
+    }
+
+    private fun pushTimerSettingsToFirebase(context: Context) {
+        val prefs = context.applicationContext.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+        val currentUsername = prefs.getString("current_username", null)
+        val isLoggedIn = prefs.getBoolean("is_logged_in", false)
+        val isAdmin = prefs.getBoolean("is_admin", false)
+        if (!isLoggedIn || isAdmin || currentUsername == null) return
+
+        val settingsMap = mapOf(
+            "timerDurationMinutes" to _timerDurationMinutes.value,
+            "stopwatchBreakDurationMinutes" to _stopwatchBreakDurationMinutes.value,
+            "autoStartBreak" to _autoStartBreak.value,
+            "autoStartPomo" to _autoStartPomo.value,
+            "autoStartStopwatchAfterBreak" to _autoStartStopwatchAfterBreak.value
+        )
+        
+        scope.launch(Dispatchers.IO) {
+            try {
+                val url = com.example.api.FirebaseConfig.getDatabaseUrl(context)
+                val db = com.google.firebase.database.FirebaseDatabase.getInstance(url)
+                db.getReference("users").child(currentUsername).child("timer_settings").setValue(settingsMap)
+            } catch (e: Exception) {
+                Log.e("FocusTimerManager", "Failed to push timer settings to Firebase", e)
+            }
+        }
+    }
+
+    fun updateTimerDurationFromCloud(mins: Int) {
+        _timerDurationMinutes.value = mins
+        if (!_isTimerRunning.value) {
+            _timerSecondsLeft.value = mins * 60
+        }
+    }
+
+    fun updateStopwatchBreakDurationFromCloud(mins: Int) {
+        _stopwatchBreakDurationMinutes.value = mins
+    }
+
+    fun updateAutoStartBreakFromCloud(enabled: Boolean) {
+        _autoStartBreak.value = enabled
+    }
+
+    fun updateAutoStartPomoFromCloud(enabled: Boolean) {
+        _autoStartPomo.value = enabled
+    }
+
+    fun updateAutoStartStopwatchAfterBreakFromCloud(enabled: Boolean) {
+        _autoStartStopwatchAfterBreak.value = enabled
     }
 }

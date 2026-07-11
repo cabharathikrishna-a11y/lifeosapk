@@ -583,8 +583,7 @@ class KeepAliveService : Service() {
                 
                 // 2. Tell the Firebase WebSocket to listen to them via isolated sub-nodes
                 myFriendsList.forEach { friend ->
-                    com.example.api.FirebaseSyncManager.listenToActiveTimer(applicationContext, friend)
-                    com.example.api.FirebaseSyncManager.listenToTodayStats(applicationContext, friend)
+                    com.example.api.FirebaseSyncManager.listenToStatsDashboard(applicationContext, friend)
                 }
                 
                 // 3. Observe the flow safely for UI updates and notifications
@@ -632,6 +631,9 @@ class KeepAliveService : Service() {
                                     )
 
                                     processBellSignal(signal, currentUsername)
+                                } else {
+                                    val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                                    notificationManager.cancel(10003)
                                 }
                             } catch (e: Exception) {
                                 Log.e("KeepAliveService", "Failed to process real-time bell update snapshot: ${e.message}", e)

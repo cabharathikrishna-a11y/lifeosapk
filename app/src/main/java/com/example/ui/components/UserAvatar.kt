@@ -18,6 +18,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -79,7 +81,13 @@ fun UserAvatar(
                 .background(Color.White.copy(alpha = 0.05f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Text(fallback, fontSize = fontSize)
+            Text(
+                text = fallback,
+                fontSize = fontSize,
+                style = TextStyle(
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                )
+            )
         }
         return
     }
@@ -111,7 +119,13 @@ fun UserAvatar(
                     .background(Color.White.copy(alpha = 0.05f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Text(fallback, fontSize = fontSize)
+                Text(
+                    text = fallback,
+                    fontSize = fontSize,
+                    style = TextStyle(
+                        platformStyle = PlatformTextStyle(includeFontPadding = false)
+                    )
+                )
             }
         }
     } else {
@@ -121,7 +135,13 @@ fun UserAvatar(
                 .background(Color.White.copy(alpha = 0.05f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Text(text = emojiOrBase64, fontSize = fontSize)
+            Text(
+                text = emojiOrBase64,
+                fontSize = fontSize,
+                style = TextStyle(
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                )
+            )
         }
     }
 }

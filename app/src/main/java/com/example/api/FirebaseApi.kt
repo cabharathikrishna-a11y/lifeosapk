@@ -61,7 +61,10 @@ data class ActiveTimer(
     val targetEndTimeMs: Long = 0L,
     val accumulatedFocusMs: Long = 0L,
     val accumulatedBreakMs: Long = 0L,
-    val timezoneOffsetMinutes: Int = 0
+    val timezoneOffsetMinutes: Int = 0,
+    val taskTitle: String? = null,
+    val tag: String? = null,
+    val isStopwatchMode: Boolean = (mode == "STOPWATCH")
 )
 
 @JsonClass(generateAdapter = true)
@@ -72,14 +75,11 @@ data class TodayStats(
 
 @JsonClass(generateAdapter = true)
 data class StatsDashboard(
-    val status: String = "RELAXING",
-    val mode: String = "POMODORO",
-    val startTimeMs: Long = 0L,
-    val targetEndTimeMs: Long = 0L,
-    val accumulatedFocusMs: Long = 0L,
-    val accumulatedBreakMs: Long = 0L,
-    val todayFocusTimeMs: Long = 0L,
-    val dateString: String = ""
+    val todayFocusMs: Long = 0L,
+    val lastSevenDaysMs: Long = 0L,
+    val lastThirtyDaysMs: Long = 0L,
+    val allTimeMs: Long = 0L,
+    val dailyBuckets: Map<String, Long> = emptyMap()
 )
 
 @JsonClass(generateAdapter = true)
@@ -270,61 +270,40 @@ class InterceptingFirebaseApi(
         }
         val userWithVersion = user.copy(appVersion = getAppVersionString())
         val userMap = mutableMapOf<String, Any>()
+        
         userWithVersion.password?.let { userMap["password"] = it }
-        userWithVersion.name?.let { userMap["name"] = it }
-        userWithVersion.nickname?.let { userMap["nickname"] = it }
-        userWithVersion.emoji?.let { userMap["emoji"] = it }
-        userWithVersion.isFocusing?.let { userMap["isFocusing"] = it }
-        userMap["accumulatedTimeMs"] = userWithVersion.accumulatedTimeMs
-        userWithVersion.lastResumeTimeMs?.let { userMap["lastResumeTimeMs"] = it }
-        userWithVersion.currentTaskTitle?.let { userMap["currentTaskTitle"] = it }
-        userWithVersion.isStopwatchMode?.let { userMap["isStopwatchMode"] = it }
         userWithVersion.lastUpdatedTimestamp?.let { userMap["lastUpdatedTimestamp"] = it }
-        userWithVersion.lastButtonClicked?.let { userMap["lastButtonClicked"] = it }
-        userWithVersion.lastButtonClickedTimestamp?.let { userMap["lastButtonClickedTimestamp"] = it }
-        userWithVersion.focusStatus?.let { userMap["focusStatus"] = it }
-        userWithVersion.currentTag?.let { userMap["currentTag"] = it }
         userWithVersion.isGoogleUser?.let { userMap["isGoogleUser"] = it }
         userWithVersion.email?.let { userMap["email"] = it }
-        userWithVersion.status?.let { userMap["status"] = it }
-        userWithVersion.appVersion?.let { userMap["appVersion"] = it }
-        userWithVersion.forceApkUrl?.let { userMap["forceApkUrl"] = it }
         userWithVersion.lastUpdatedDeviceId?.let { userMap["lastUpdatedDeviceId"] = it }
-        userWithVersion.deviceLogs?.let { userMap["deviceLogs"] = it }
 
-        userWithVersion.profile?.let { p ->
-            userMap["profile"] = mapOf("name" to p.name, "nickname" to p.nickname, "photoUpdatedAt" to p.photoUpdatedAt)
-        }
-        userWithVersion.activeTimer?.let { t ->
-            userMap["active_timer"] = mapOf(
-                "status" to t.status,
-                "mode" to t.mode,
-                "startTimeMs" to t.startTimeMs,
-                "targetEndTimeMs" to t.targetEndTimeMs,
-                "accumulatedFocusMs" to t.accumulatedFocusMs,
-                "accumulatedBreakMs" to t.accumulatedBreakMs
-            )
-        }
-        userWithVersion.todayStats?.let { s ->
-            userMap["today_stats"] = mapOf("todayFocusTimeMs" to s.todayFocusTimeMs, "dateString" to s.dateString)
-        }
+        // Keep profile as the sole source of user details
+        val p = userWithVersion.profile ?: UserProfile(
+            name = userWithVersion.name ?: "",
+            nickname = userWithVersion.nickname ?: ""
+        )
+        userMap["profile"] = mapOf("name" to p.name, "nickname" to p.nickname, "photoUpdatedAt" to p.photoUpdatedAt)
 
-        // Keep stats_dashboard aligned
+        // Keep active_timer and today_stats as separate nodes
         val t = userWithVersion.activeTimer ?: ActiveTimer()
-        val s = userWithVersion.todayStats ?: TodayStats()
-        userMap["stats_dashboard"] = mapOf(
+        userMap["active_timer"] = mapOf(
             "status" to t.status,
             "mode" to t.mode,
+            "isStopwatchMode" to (t.mode == "STOPWATCH" || t.isStopwatchMode),
             "startTimeMs" to t.startTimeMs,
             "targetEndTimeMs" to t.targetEndTimeMs,
             "accumulatedFocusMs" to t.accumulatedFocusMs,
             "accumulatedBreakMs" to t.accumulatedBreakMs,
-            "todayFocusTimeMs" to s.todayFocusTimeMs,
-            "dateString" to s.dateString
+            "timezoneOffsetMinutes" to t.timezoneOffsetMinutes,
+            "taskTitle" to (t.taskTitle ?: "General Focus"),
+            "tag" to (t.tag ?: "Study")
         )
 
+        // today_stats is exclusively managed by Firebase Cloud Functions.
+        // We do not write it from the client to prevent overwriting cloud-calculated statistics.
+
         return kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
-            getDatabase().getReference("users").child(username).setValue(userMap)
+            getDatabase().getReference("users").child(username).updateChildren(userMap)
                 .addOnCompleteListener { task ->
                     if (task.isSuccessful) {
                         continuation.resume(userWithVersion, onCancellation = null)

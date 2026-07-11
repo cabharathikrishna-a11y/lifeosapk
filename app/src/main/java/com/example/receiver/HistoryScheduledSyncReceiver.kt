@@ -28,7 +28,14 @@ class HistoryScheduledSyncReceiver : BroadcastReceiver() {
                     Log.i("HistoryScheduledSyncReceiver", "Syncing history logs from Firebase for user $username...")
                     val db = AppDatabase.getInstance(context)
                     val repository = LocalRepository(db, context)
-                    repository.syncMissingHistoryLogs(username, 0L)
+                    
+                    val syncPrefs = context.getSharedPreferences("sync_prefs", Context.MODE_PRIVATE)
+                    val lastSync = syncPrefs.getLong("history_logs_last_sync_${username}", 0L)
+                    
+                    repository.syncMissingHistoryLogs(username, lastSync)
+                    
+                    val newSyncTime = System.currentTimeMillis()
+                    syncPrefs.edit().putLong("history_logs_last_sync_${username}", newSyncTime).apply()
                     Log.i("HistoryScheduledSyncReceiver", "Scheduled history sync completed successfully.")
                 } else {
                     Log.i("HistoryScheduledSyncReceiver", "No logged-in user found. Skipping sync.")

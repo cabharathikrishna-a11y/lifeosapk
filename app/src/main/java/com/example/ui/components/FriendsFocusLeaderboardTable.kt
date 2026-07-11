@@ -117,7 +117,14 @@ fun FriendsFocusLeaderboardTable(
                                 val elapsed = currentTime.value - activeTimer.startTimeMs
                                 maxOf(0L, elapsed) + activeTimer.accumulatedFocusMs
                             }
-                            "BREAK", "PAUSED" -> activeTimer.accumulatedFocusMs
+                            "BREAK" -> {
+                                if (activeTimer.taskTitle == "Taking a Break" || activeTimer.tag == "Break") {
+                                    0L
+                                } else {
+                                    activeTimer.accumulatedFocusMs
+                                }
+                            }
+                            "PAUSED" -> activeTimer.accumulatedFocusMs
                             "RELAXING" -> 0L
                             else -> activeTimer.accumulatedFocusMs
                         }
@@ -145,7 +152,14 @@ fun FriendsFocusLeaderboardTable(
                             val elapsed = currentTime.value - activeTimer.startTimeMs
                             maxOf(0L, elapsed) + activeTimer.accumulatedFocusMs
                         }
-                        "BREAK", "PAUSED" -> activeTimer.accumulatedFocusMs
+                        "BREAK" -> {
+                            if (activeTimer.taskTitle == "Taking a Break" || activeTimer.tag == "Break") {
+                                0L
+                            } else {
+                                activeTimer.accumulatedFocusMs
+                            }
+                        }
+                        "PAUSED" -> activeTimer.accumulatedFocusMs
                         "RELAXING" -> 0L
                         else -> activeTimer.accumulatedFocusMs
                     }

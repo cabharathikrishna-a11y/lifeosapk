@@ -327,7 +327,12 @@ class LocalRepository(val db: AppDatabase, val context: android.content.Context)
         val ref = dbFirebase.getReference("users").child(myUsername).child("history_logs")
         
         // Query history logs by end time to get missing records since last sync
-        val query = ref.orderByChild("endTime").startAt(lastSyncTimestamp.toDouble() + 1.0)
+        // Query history logs: if full sync, query all; if delta, query by timestamp (since endTime is now a formatted string)
+        val query = if (lastSyncTimestamp == 0L) {
+            ref
+        } else {
+            ref.orderByChild("timestamp").startAt(lastSyncTimestamp.toDouble() + 1.0)
+        }
         
         val existingRecords = focusRecordDao.getAllRecordsDirect()
         val existingKeys = existingRecords.map { "${it.timestamp}_${it.startTime}_${it.endTime}" }.toSet()
@@ -345,10 +350,48 @@ class LocalRepository(val db: AppDatabase, val context: android.content.Context)
                                     val notes = child.child("notes").getValue(String::class.java) ?: ""
                                     val durationSeconds = child.child("durationSeconds").getValue(Int::class.java) ?: 0
                                     val durationMinutes = child.child("durationMinutes").getValue(Int::class.java) ?: (durationSeconds / 60)
-                                    val dateString = child.child("dateString").getValue(String::class.java) ?: ""
-                                    val startTime = child.child("startTime").getValue(String::class.java) ?: ""
-                                    val endTime = child.child("endTime").getValue(String::class.java) ?: ""
-                                    val timestamp = child.child("timestamp").getValue(Long::class.java) ?: System.currentTimeMillis()
+                                    
+                                    // Parse timestamp with fallback to endTime for old records
+                                    val timestamp = try {
+                                        child.child("timestamp").getValue(Long::class.java)
+                                    } catch (e: Exception) {
+                                        null
+                                    } ?: try {
+                                        child.child("endTime").getValue(Long::class.java)
+                                    } catch (e: Exception) {
+                                        null
+                                    } ?: System.currentTimeMillis()
+
+                                    // Parse dateString with fallback to timestamp formatting for old records
+                                    val dateString = try {
+                                        child.child("dateString").getValue(String::class.java) ?: ""
+                                    } catch (e: Exception) {
+                                        ""
+                                    }.takeIf { it.isNotEmpty() } ?: java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date(timestamp))
+
+                                    // Parse startTime with fallback to formatting if it is stored as Long epoch ms
+                                    val startTime = try {
+                                        child.child("startTime").getValue(String::class.java) ?: ""
+                                    } catch (e: Exception) {
+                                        val startLong = child.child("startTime").getValue(Long::class.java) ?: 0L
+                                        if (startLong > 0L) {
+                                            java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(startLong))
+                                        } else {
+                                            ""
+                                        }
+                                    }
+
+                                    // Parse endTime with fallback to formatting if it is stored as Long epoch ms
+                                    val endTime = try {
+                                        child.child("endTime").getValue(String::class.java) ?: ""
+                                    } catch (e: Exception) {
+                                        val endLong = child.child("endTime").getValue(Long::class.java) ?: 0L
+                                        if (endLong > 0L) {
+                                            java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(endLong))
+                                        } else {
+                                            ""
+                                        }
+                                    }
                                     
                                     val key = "${timestamp}_${startTime}_${endTime}"
                                     if (existingKeys.contains(key)) {

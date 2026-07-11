@@ -207,43 +207,36 @@ fun SettingsView(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                     }
                 }
 
-                // Group 1: Core Systems & AI
+                // Group 1: Core Settings
                 item {
-                    SettingsCategoryGroup(title = "Core Systems & AI") {
+                    SettingsCategoryGroup(title = "Core Settings") {
                         SettingsRowItem(
-                            title = "1. GENERAL SYSTEM",
-                            subtitle = "Tab alignment, navigation bar reordering, style configurations",
+                            title = "SYSTEM & DIAGNOSTICS",
+                            subtitle = "General options, background diagnostics, updates, deep links",
                             icon = Icons.Default.Settings,
                             iconBgColor = Color(0xFF2196F3)
-                        ) { activePage = 1 }
+                        ) { activePage = 30 }
                         HorizontalDivider(color = Color(0xFF1E1E22), thickness = 0.5.dp, modifier = Modifier.padding(start = 56.dp, end = 16.dp))
                         SettingsRowItem(
-                            title = "DIAGNOSTICS & BACKGROUND",
-                            subtitle = "Fix stopwatch lockscreen freeze & background recording on Samsung/Oppo/Lenovo/Moto",
-                            icon = Icons.Default.Info,
-                            iconBgColor = Color(0xFFE53935)
-                        ) { activePage = 17 }
-                        HorizontalDivider(color = Color(0xFF1E1E22), thickness = 0.5.dp, modifier = Modifier.padding(start = 56.dp, end = 16.dp))
-                        SettingsRowItem(
-                            title = "SYSTEM UPDATE CENTER",
-                            subtitle = "Check for updates, manage background downloads, authenticate tester",
-                            icon = Icons.Default.Refresh,
-                            iconBgColor = Color(0xFF4CAF50)
-                        ) { activePage = 16 }
-                        HorizontalDivider(color = Color(0xFF1E1E22), thickness = 0.5.dp, modifier = Modifier.padding(start = 56.dp, end = 16.dp))
-                        SettingsRowItem(
-                            title = "2. DEEPA AI BRAIN",
-                            subtitle = "Offline model caching, memories vault management",
-                            icon = Icons.Default.Face,
+                            title = "AI & USER PROFILE",
+                            subtitle = "Personalize profile, edit nickname, offline AI model caching",
+                            icon = Icons.Default.Person,
                             iconBgColor = Color(0xFF00E5FF)
-                        ) { activePage = 11 }
+                        ) { activePage = 31 }
                         HorizontalDivider(color = Color(0xFF1E1E22), thickness = 0.5.dp, modifier = Modifier.padding(start = 56.dp, end = 16.dp))
                         SettingsRowItem(
-                            title = "3. BACKUP & RESTORE",
-                            subtitle = "JSON manual database import & security exports",
+                            title = "DATA & CONNECTIONS",
+                            subtitle = "JSON backup/restore, Drive sync, permissions, database tools",
                             icon = Icons.Default.Refresh,
                             iconBgColor = Color(0xFFFFB300)
-                        ) { activePage = 12 }
+                        ) { activePage = 32 }
+                        HorizontalDivider(color = Color(0xFF1E1E22), thickness = 0.5.dp, modifier = Modifier.padding(start = 56.dp, end = 16.dp))
+                        SettingsRowItem(
+                            title = "SECURITY & SCREEN LIMITS",
+                            subtitle = "PIN/Password locking, biometric setups, app blocks",
+                            icon = Icons.Default.Lock,
+                            iconBgColor = Color(0xFFE91E63)
+                        ) { activePage = 33 }
                     }
                 }
 
@@ -251,35 +244,35 @@ fun SettingsView(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                 item {
                     SettingsCategoryGroup(title = "Productivity Core") {
                         SettingsRowItem(
-                            title = "4. TIMER CONFIGURATION",
+                            title = "TIMER CONFIGURATION",
                             subtitle = "Session periods, default break times, vibration style toggles",
                             icon = Icons.Default.PlayArrow,
                             iconBgColor = Color(0xFFFF3D00)
                         ) { activePage = 2 }
                         HorizontalDivider(color = Color(0xFF1E1E22), thickness = 0.5.dp, modifier = Modifier.padding(start = 56.dp, end = 16.dp))
                         SettingsRowItem(
-                            title = "5. TASKS ENGINE",
+                            title = "TASKS ENGINE",
                             subtitle = "Reminder frequencies, custom vibrators, default lists",
                             icon = Icons.Default.List,
                             iconBgColor = Color(0xFF4CAF50)
                         ) { activePage = 3 }
                         HorizontalDivider(color = Color(0xFF1E1E22), thickness = 0.5.dp, modifier = Modifier.padding(start = 56.dp, end = 16.dp))
                         SettingsRowItem(
-                            title = "6. CALENDAR PLANNER",
+                            title = "CALENDAR PLANNER",
                             subtitle = "Style layouts, display settings, timeline filters",
                             icon = Icons.Default.DateRange,
                             iconBgColor = Color(0xFF9C27B0)
                         ) { activePage = 4 }
                         HorizontalDivider(color = Color(0xFF1E1E22), thickness = 0.5.dp, modifier = Modifier.padding(start = 56.dp, end = 16.dp))
                         SettingsRowItem(
-                            title = "7. HABITS TRACKER",
+                            title = "HABITS TRACKER",
                             subtitle = "Streak calculations, automatic midnight reset triggers",
                             icon = Icons.Default.Refresh,
                             iconBgColor = Color(0xFFFF8F00)
                         ) { activePage = 5 }
                         HorizontalDivider(color = Color(0xFF1E1E22), thickness = 0.5.dp, modifier = Modifier.padding(start = 56.dp, end = 16.dp))
                         SettingsRowItem(
-                            title = "8. SLEEP & WAKE-UP ALARM",
+                            title = "SLEEP & WAKE-UP ALARM",
                             subtitle = "Bedtime reminders, wake-up alarms, snooze & alarm states",
                             icon = Icons.Default.Star,
                             iconBgColor = Color(0xFF3F51B5)
@@ -287,25 +280,25 @@ fun SettingsView(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                     }
                 }
 
-                // Group 3: Metrics & Journal Logs
+                // Group 3: Logs & Utilities
                 item {
                     SettingsCategoryGroup(title = "Logs & Utilities") {
                         SettingsRowItem(
-                            title = "8. COUNTDOWNS & ALERTS",
+                            title = "COUNTDOWNS & ALERTS",
                             subtitle = "Background notifications, custom alert parameters",
                             icon = Icons.Default.Notifications,
                             iconBgColor = Color(0xFF00E676)
                         ) { activePage = 6 }
                         HorizontalDivider(color = Color(0xFF1E1E22), thickness = 0.5.dp, modifier = Modifier.padding(start = 56.dp, end = 16.dp))
                         SettingsRowItem(
-                            title = "9. LIFE JOURNAL",
+                            title = "LIFE JOURNAL",
                             subtitle = "Storage usage indexers, backup matching constraints",
                             icon = Icons.Default.Book,
                             iconBgColor = Color(0xFFE91E63)
                         ) { activePage = 7 }
                         HorizontalDivider(color = Color(0xFF1E1E22), thickness = 0.5.dp, modifier = Modifier.padding(start = 56.dp, end = 16.dp))
                         SettingsRowItem(
-                            title = "10. CONTACTS DIRECTORY",
+                            title = "CONTACTS DIRECTORY",
                             subtitle = "Full syncing filters, categories pairing, anniversaries",
                             icon = Icons.Default.AccountBox,
                             iconBgColor = Color(0xFF03A9F4)
@@ -313,18 +306,18 @@ fun SettingsView(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                     }
                 }
 
-                // Group 4: Sandbox & Wealth
+                // Group 4: File & Financials
                 item {
                     SettingsCategoryGroup(title = "File & Financials") {
                         SettingsRowItem(
-                            title = "11. FILE EXPLORER",
+                            title = "FILE EXPLORER",
                             subtitle = "Workspace directories, index preferred storage",
                             icon = Icons.Default.Folder,
                             iconBgColor = Color(0xFF8D6E63)
                         ) { activePage = 9 }
                         HorizontalDivider(color = Color(0xFF1E1E22), thickness = 0.5.dp, modifier = Modifier.padding(start = 56.dp, end = 16.dp))
                         SettingsRowItem(
-                            title = "12. FINANCIAL LEDGER",
+                            title = "FINANCIAL LEDGER",
                             subtitle = "Accounts, custom family members, categories reporting",
                             icon = Icons.Default.MonetizationOn,
                             iconBgColor = Color(0xFF4CAF50)
@@ -332,56 +325,9 @@ fun SettingsView(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                     }
                 }
 
-                // Group 5: Deep Security
+                // Group 5: Account
                 item {
-                    SettingsCategoryGroup(title = "Security & Privacy Settings") {
-                        SettingsRowItem(
-                            title = "13. SECURE APP LOCK",
-                            subtitle = "Verify code settings, PIN setups, recover questions",
-                            icon = Icons.Default.Lock,
-                            iconBgColor = Color(0xFFE91E63)
-                        ) { activePage = 13 }
-                        HorizontalDivider(color = Color(0xFF1E1E22), thickness = 0.5.dp, modifier = Modifier.padding(start = 56.dp, end = 16.dp))
-                        SettingsRowItem(
-                            title = "14. BLOCKS & SCREEN LIMITS",
-                            subtitle = "Establish application constraints, usage warnings",
-                            icon = Icons.Default.Block,
-                            iconBgColor = Color(0xFFD32F2F)
-                        ) { activePage = 14 }
-                        HorizontalDivider(color = Color(0xFF1E1E22), thickness = 0.5.dp, modifier = Modifier.padding(start = 56.dp, end = 16.dp))
-                        SettingsRowItem(
-                            title = "15. PERMISSIONS & API CONNECTIONS",
-                            subtitle = "Manage system permissions and Google Drive",
-                            icon = Icons.Default.CheckCircle,
-                            iconBgColor = Color(0xFF4CAF50)
-                        ) { activePage = 19 }
-                    }
-                }
-
-                // Group 6: Account
-                item {
-                    SettingsCategoryGroup(title = "Account & Sync") {
-                        SettingsRowItem(
-                            title = "16. USER INFO",
-                            subtitle = "Edit your profile details, nickname, and emoji",
-                            icon = Icons.Default.Person,
-                            iconBgColor = Color(0xFF673AB7)
-                        ) { activePage = 15 }
-                        HorizontalDivider(color = Color(0xFF1E1E22), thickness = 0.5.dp, modifier = Modifier.padding(start = 56.dp, end = 16.dp))
-                        SettingsRowItem(
-                            title = "17. DEEP LINKS & SHORTCUTS",
-                            subtitle = "Copy application deep links, automation URI routes & assets",
-                            icon = Icons.Default.Share,
-                            iconBgColor = Color(0xFF03A9F4)
-                        ) { activePage = 18 }
-                        HorizontalDivider(color = Color(0xFF1E1E22), thickness = 0.5.dp, modifier = Modifier.padding(start = 56.dp, end = 16.dp))
-                        SettingsRowItem(
-                            title = "18. RECOMPOSE FIREBASE",
-                            subtitle = "Clean database, delete non-Google registered user nodes, and verify structure",
-                            icon = Icons.Default.Refresh,
-                            iconBgColor = Color(0xFF00796B)
-                        ) { activePage = 22 }
-                        HorizontalDivider(color = Color(0xFF1E1E22), thickness = 0.5.dp, modifier = Modifier.padding(start = 56.dp, end = 16.dp))
+                    SettingsCategoryGroup(title = "Account Management") {
                         SettingsRowItem(
                             title = "LOGOUT",
                             subtitle = "Sign out from the current online account securely",
@@ -409,7 +355,7 @@ fun SettingsView(viewModel: AppViewModel, modifier: Modifier = Modifier) {
         1 -> {
             SettingsGeneralSystemPage(
                 viewModel = viewModel,
-                onBack = { activePage = 0 }
+                onBack = { activePage = 30 }
             )
         }
 
@@ -482,7 +428,7 @@ fun SettingsView(viewModel: AppViewModel, modifier: Modifier = Modifier) {
         11 -> {
             SettingsDeepaAIPage(
                 viewModel = viewModel,
-                onBack = { activePage = 0 }
+                onBack = { activePage = 31 }
             )
         }
 
@@ -490,7 +436,7 @@ fun SettingsView(viewModel: AppViewModel, modifier: Modifier = Modifier) {
             SettingsSubpageWorkspace(
                 title = "Backup & Restore",
                 description = "Export and import your entire Life OS data via simple JSON backup.",
-                onBack = { activePage = 0 }
+                onBack = { activePage = 32 }
             ) {
                 LifeOSBackupSection(viewModel = viewModel)
                 Spacer(modifier = Modifier.height(16.dp))
@@ -504,7 +450,7 @@ fun SettingsView(viewModel: AppViewModel, modifier: Modifier = Modifier) {
             SettingsSubpageWorkspace(
                 title = "Secure App Lock",
                 description = "Configure fingerprint/face biometric unlock, secure multi-digit PIN, or alphanumeric Password protection along with backup recovery.",
-                onBack = { activePage = 0 }
+                onBack = { activePage = 33 }
             ) {
                 AppLockSettingsSection()
             }
@@ -514,7 +460,7 @@ fun SettingsView(viewModel: AppViewModel, modifier: Modifier = Modifier) {
             SettingsSubpageWorkspace(
                 title = "Blocks & Screen Limits",
                 description = "Configure daily tracked limit quotas for Instagram, Facebook, Snapchat, or other manual apps.",
-                onBack = { activePage = 0 }
+                onBack = { activePage = 33 }
             ) {
                 AppBlocksSettingsSection()
             }
@@ -523,39 +469,37 @@ fun SettingsView(viewModel: AppViewModel, modifier: Modifier = Modifier) {
         15 -> {
             SettingsUserInfoPage(
                 viewModel = viewModel,
-                onBack = { activePage = 0 }
+                onBack = { activePage = 31 }
             )
         }
         
         16 -> {
             SettingsUpdatesPage(
                 viewModel = viewModel,
-                onBack = { activePage = 0 }
+                onBack = { activePage = 30 }
             )
         }
 
         17 -> {
             SettingsBackgroundDiagnosticsPage(
                 viewModel = viewModel,
-                onBack = { activePage = 0 }
+                onBack = { activePage = 30 }
             )
         }
 
         19 -> {
             SettingsPermissionsPage(
                 viewModel = viewModel,
-                onBack = { activePage = 0 }
+                onBack = { activePage = 32 }
             )
         }
 
         18 -> {
             SettingsDeepLinksPage(
                 viewModel = viewModel,
-                onBack = { activePage = 0 }
+                onBack = { activePage = 30 }
             )
         }
-
-
 
         21 -> {
             SettingsSubpageWorkspace(
@@ -571,10 +515,119 @@ fun SettingsView(viewModel: AppViewModel, modifier: Modifier = Modifier) {
             SettingsSubpageWorkspace(
                 title = "Recompose Firebase Database",
                 description = "Verify data structure and clean up non-Google registered user nodes.",
-                onBack = { activePage = 0 },
+                onBack = { activePage = 32 },
                 scrollable = false
             ) {
                 SettingsRecomposeFirebasePage(viewModel = viewModel)
+            }
+        }
+
+        30 -> {
+            SettingsSubpageWorkspace(
+                title = "System & Diagnostics",
+                description = "Manage tab alignment, performance diagnostics, updates, and deep link options.",
+                onBack = { activePage = 0 }
+            ) {
+                SettingsRowItem(
+                    title = "GENERAL SYSTEM",
+                    subtitle = "Tab alignment, navigation bar reordering, style configurations",
+                    icon = Icons.Default.Settings,
+                    iconBgColor = Color(0xFF2196F3)
+                ) { activePage = 1 }
+                HorizontalDivider(color = Color(0xFF1E1E22), thickness = 0.5.dp)
+                SettingsRowItem(
+                    title = "DIAGNOSTICS & BACKGROUND",
+                    subtitle = "Fix stopwatch lockscreen freeze & background recording on Samsung/Oppo/Lenovo/Moto",
+                    icon = Icons.Default.Info,
+                    iconBgColor = Color(0xFFE53935)
+                ) { activePage = 17 }
+                HorizontalDivider(color = Color(0xFF1E1E22), thickness = 0.5.dp)
+                SettingsRowItem(
+                    title = "SYSTEM UPDATE CENTER",
+                    subtitle = "Check for updates, manage background downloads, authenticate tester",
+                    icon = Icons.Default.Refresh,
+                    iconBgColor = Color(0xFF4CAF50)
+                ) { activePage = 16 }
+                HorizontalDivider(color = Color(0xFF1E1E22), thickness = 0.5.dp)
+                SettingsRowItem(
+                    title = "DEEP LINKS & SHORTCUTS",
+                    subtitle = "Copy application deep links, automation URI routes & assets",
+                    icon = Icons.Default.Share,
+                    iconBgColor = Color(0xFF03A9F4)
+                ) { activePage = 18 }
+            }
+        }
+
+        31 -> {
+            SettingsSubpageWorkspace(
+                title = "AI & User Profile",
+                description = "Personalize your nickname, profile emoji, and manage Deepa AI brain cache.",
+                onBack = { activePage = 0 }
+            ) {
+                SettingsRowItem(
+                    title = "USER INFO",
+                    subtitle = "Edit your profile details, nickname, and emoji",
+                    icon = Icons.Default.Person,
+                    iconBgColor = Color(0xFF673AB7)
+                ) { activePage = 15 }
+                HorizontalDivider(color = Color(0xFF1E1E22), thickness = 0.5.dp)
+                SettingsRowItem(
+                    title = "DEEPA AI BRAIN",
+                    subtitle = "Offline model caching, memories vault management",
+                    icon = Icons.Default.Face,
+                    iconBgColor = Color(0xFF00E5FF)
+                ) { activePage = 11 }
+            }
+        }
+
+        32 -> {
+            SettingsSubpageWorkspace(
+                title = "Data & Connections",
+                description = "Configure backups, calendar sync, Drive sync, permissions, and database tools.",
+                onBack = { activePage = 0 }
+            ) {
+                SettingsRowItem(
+                    title = "BACKUP & RESTORE",
+                    subtitle = "JSON backups, Google Calendar & tasks sync, Firebase settings",
+                    icon = Icons.Default.Refresh,
+                    iconBgColor = Color(0xFFFFB300)
+                ) { activePage = 12 }
+                HorizontalDivider(color = Color(0xFF1E1E22), thickness = 0.5.dp)
+                SettingsRowItem(
+                    title = "PERMISSIONS & API CONNECTIONS",
+                    subtitle = "Manage system permissions and Google Drive",
+                    icon = Icons.Default.CheckCircle,
+                    iconBgColor = Color(0xFF4CAF50)
+                ) { activePage = 19 }
+                HorizontalDivider(color = Color(0xFF1E1E22), thickness = 0.5.dp)
+                SettingsRowItem(
+                    title = "RECOMPOSE FIREBASE",
+                    subtitle = "Clean database, delete non-Google registered user nodes",
+                    icon = Icons.Default.Refresh,
+                    iconBgColor = Color(0xFF00796B)
+                ) { activePage = 22 }
+            }
+        }
+
+        33 -> {
+            SettingsSubpageWorkspace(
+                title = "Security & Limits",
+                description = "Configure lock screen PIN and app usage limits.",
+                onBack = { activePage = 0 }
+            ) {
+                SettingsRowItem(
+                    title = "SECURE APP LOCK",
+                    subtitle = "Biometrics setup, secure PIN/Password lock configurations",
+                    icon = Icons.Default.Lock,
+                    iconBgColor = Color(0xFFE91E63)
+                ) { activePage = 13 }
+                HorizontalDivider(color = Color(0xFF1E1E22), thickness = 0.5.dp)
+                SettingsRowItem(
+                    title = "BLOCKS & SCREEN LIMITS",
+                    subtitle = "Establish application constraints, usage warnings",
+                    icon = Icons.Default.Block,
+                    iconBgColor = Color(0xFFD32F2F)
+                ) { activePage = 14 }
             }
         }
     }

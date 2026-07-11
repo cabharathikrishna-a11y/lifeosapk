@@ -1752,12 +1752,14 @@ class AppViewModel(application: Application, private val repository: LocalReposi
 
         val activeTimerState = com.example.api.ActiveTimer(
             status = if (!isFocusPhase) "BREAK" else if (isTimerActive || isSwActive) "FOCUSING" else if (cumSecs > 0 || swSecs > 0) "PAUSED" else "RELAXING",
-            mode = if (isSwActive) "STOPWATCH" else "POMODORO",
+            mode = if (isSwActive || FocusTimerManager.wasStartedFromStopwatch.value) "STOPWATCH" else "POMODORO",
             startTimeMs = if (isFocusing) FocusTimerManager.lastResumeTimeMs.value ?: System.currentTimeMillis() else 0L,
             targetEndTimeMs = if (isTimerActive && !isSwActive) (FocusTimerManager.lastResumeTimeMs.value ?: System.currentTimeMillis()) + (FocusTimerManager.timerSecondsLeft.value * 1000L) else 0L,
             accumulatedFocusMs = if (isFocusPhase) FocusTimerManager.accumulatedSessionTimeMs.value else 0L,
             accumulatedBreakMs = if (!isFocusPhase) FocusTimerManager.accumulatedSessionTimeMs.value else 0L,
-            timezoneOffsetMinutes = java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / (60 * 1000)
+            timezoneOffsetMinutes = java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / (60 * 1000),
+            taskTitle = if (isFocusPhase) currentTaskTitle else null,
+            tag = if (isFocusPhase) currentTag.takeIf { it.isNotEmpty() } else null
         )
 
         val updatedUser = if (_shareFocusDetailsEnabled.value) {
@@ -1992,7 +1994,11 @@ class AppViewModel(application: Application, private val repository: LocalReposi
                             FocusTimerManager.setLastResumeTimeMs(activeTimer.startTimeMs)
                             
                             val timerDurationSecs = FocusTimerManager.timerDurationMinutes.value * 60
-                            val secondsLeft = (timerDurationSecs - elapsedSeconds).coerceAtLeast(0)
+                            val secondsLeft = if (activeTimer.targetEndTimeMs > 0) {
+                                ((activeTimer.targetEndTimeMs - System.currentTimeMillis()) / 1000).toInt().coerceAtLeast(0)
+                            } else {
+                                (timerDurationSecs - elapsedSeconds).coerceAtLeast(0)
+                            }
                             
                             val localLeft = FocusTimerManager.timerSecondsLeft.value
                             if (Math.abs(localLeft - secondsLeft) > 3) {
@@ -2013,7 +2019,11 @@ class AppViewModel(application: Application, private val repository: LocalReposi
                             prefs.getInt("break_duration", 5)
                         }
                         val breakDurationSecs = breakDurationMins * 60
-                        val secondsLeft = (breakDurationSecs - elapsedSeconds).coerceAtLeast(0)
+                        val secondsLeft = if (activeTimer.targetEndTimeMs > 0) {
+                            ((activeTimer.targetEndTimeMs - System.currentTimeMillis()) / 1000).toInt().coerceAtLeast(0)
+                        } else {
+                            (breakDurationSecs - elapsedSeconds).coerceAtLeast(0)
+                        }
                         
                         if (FocusTimerManager.isStopwatchActive.value) {
                             FocusTimerManager.pauseStopwatch(context, stopActiveAlarm = false, updateButton = false)
@@ -2322,6 +2332,7 @@ class AppViewModel(application: Application, private val repository: LocalReposi
     fun updateBreakDuration(mins: Int) {
         _breakDurationMins.value = mins
         prefs.edit().putInt("break_duration", mins).apply()
+        FocusTimerManager.setStopwatchBreakDuration(getApplication(), mins)
     }
 
     fun updateSoundOption(sound: String) {
@@ -4019,12 +4030,14 @@ class AppViewModel(application: Application, private val repository: LocalReposi
 
         val activeTimerState = com.example.api.ActiveTimer(
             status = if (!isFocusPhase) "BREAK" else if (isTimerActive || isSwActive) "FOCUSING" else if (cumSecs > 0 || swSecs > 0) "PAUSED" else "RELAXING",
-            mode = if (isSwActive) "STOPWATCH" else "POMODORO",
+            mode = if (isSwActive || FocusTimerManager.wasStartedFromStopwatch.value) "STOPWATCH" else "POMODORO",
             startTimeMs = if (isFocusing) FocusTimerManager.lastResumeTimeMs.value ?: System.currentTimeMillis() else 0L,
             targetEndTimeMs = if (isTimerActive && !isSwActive) (FocusTimerManager.lastResumeTimeMs.value ?: System.currentTimeMillis()) + (FocusTimerManager.timerSecondsLeft.value * 1000L) else 0L,
             accumulatedFocusMs = if (isFocusPhase) FocusTimerManager.accumulatedSessionTimeMs.value else 0L,
             accumulatedBreakMs = if (!isFocusPhase) FocusTimerManager.accumulatedSessionTimeMs.value else 0L,
-            timezoneOffsetMinutes = java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / (60 * 1000)
+            timezoneOffsetMinutes = java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / (60 * 1000),
+            taskTitle = if (isFocusPhase) currentTaskTitle else null,
+            tag = if (isFocusPhase) currentTag.takeIf { it.isNotEmpty() } else null
         )
 
         val updatedUser = if (_shareFocusDetailsEnabled.value) {
@@ -7343,6 +7356,7 @@ class AppViewModel(application: Application, private val repository: LocalReposi
                 mutableData.child("startTimeMs").value = System.currentTimeMillis()
                 val durationMs = if (mode == "POMODORO") 25 * 60 * 1000L else 0L
                 mutableData.child("targetEndTimeMs").value = System.currentTimeMillis() + durationMs
+                mutableData.child("timezoneOffsetMinutes").value = java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / (60 * 1000)
                 return com.google.firebase.database.Transaction.success(mutableData)
             }
 
@@ -7437,35 +7451,34 @@ class AppViewModel(application: Application, private val repository: LocalReposi
             val url = com.example.api.FirebaseConfig.getDatabaseUrl(context)
             val db = com.google.firebase.database.FirebaseDatabase.getInstance(url)
             
-            // One-time .get() for active_timer
-            db.getReference("users").child(username).child("active_timer").get().addOnSuccessListener { snapshot ->
-                if (snapshot.exists()) {
-                    val status = snapshot.child("status").getValue(String::class.java) ?: "RELAXING"
-                    val mode = snapshot.child("mode").getValue(String::class.java) ?: "POMODORO"
-                    val startTimeMs = snapshot.child("startTimeMs").getValue(Long::class.java) ?: 0L
-                    val targetEndTimeMs = snapshot.child("targetEndTimeMs").getValue(Long::class.java) ?: 0L
-                    val accumulatedFocusMs = snapshot.child("accumulatedFocusMs").getValue(Long::class.java) ?: 0L
-                    val accumulatedBreakMs = snapshot.child("accumulatedBreakMs").getValue(Long::class.java) ?: 0L
+            // One-time .get() for active_timer and today_stats
+            db.getReference("users").child(username).child("active_timer").get().addOnSuccessListener { timerSnap ->
+                db.getReference("users").child(username).child("today_stats").get().addOnSuccessListener { statsSnap ->
+                    val status = timerSnap.child("status").getValue(String::class.java) ?: "RELAXING"
+                    val mode = timerSnap.child("mode").getValue(String::class.java) ?: "POMODORO"
+                    val startTimeMs = timerSnap.child("startTimeMs").getValue(Long::class.java) ?: 0L
+                    val targetEndTimeMs = timerSnap.child("targetEndTimeMs").getValue(Long::class.java) ?: 0L
+                    val accumulatedFocusMs = timerSnap.child("accumulatedFocusMs").getValue(Long::class.java) ?: 0L
+                    val accumulatedBreakMs = timerSnap.child("accumulatedBreakMs").getValue(Long::class.java) ?: 0L
+                    val timezoneOffsetMinutes = timerSnap.child("timezoneOffsetMinutes").getValue(Int::class.java) ?: 0
+                    val taskTitle = timerSnap.child("taskTitle").getValue(String::class.java)
+                    val tag = timerSnap.child("tag").getValue(String::class.java)
                     
+                    val todayFocusTimeMs = statsSnap.child("todayFocusTimeMs").getValue(Long::class.java) ?: 0L
+                    val dateString = statsSnap.child("dateString").getValue(String::class.java) ?: ""
+
                     val sixHoursMs = 6 * 60 * 60 * 1000L
                     if (status == "FOCUSING" && startTimeMs > 0L && (System.currentTimeMillis() - startTimeMs) > sixHoursMs) {
                         viewModelScope.launch(Dispatchers.Main) {
                             android.widget.Toast.makeText(context, "Your last session was interrupted. Finalizing...", android.widget.Toast.LENGTH_LONG).show()
                         }
                         endTimerTransaction()
-                        com.example.api.FirebaseRepository.updateActiveTimer(username, com.example.api.ActiveTimer("RELAXING", mode, 0L, 0L, 0L, 0L))
+                        com.example.api.FirebaseRepository.updateActiveTimer(username, com.example.api.ActiveTimer("RELAXING", mode, 0L, 0L, 0L, 0L, timezoneOffsetMinutes, taskTitle, tag))
+                        com.example.api.FirebaseRepository.updateTodayStats(username, com.example.api.TodayStats(todayFocusTimeMs, dateString))
                     } else {
-                        com.example.api.FirebaseRepository.updateActiveTimer(username, com.example.api.ActiveTimer(status, mode, startTimeMs, targetEndTimeMs, accumulatedFocusMs, accumulatedBreakMs))
+                        com.example.api.FirebaseRepository.updateActiveTimer(username, com.example.api.ActiveTimer(status, mode, startTimeMs, targetEndTimeMs, accumulatedFocusMs, accumulatedBreakMs, timezoneOffsetMinutes, taskTitle, tag))
+                        com.example.api.FirebaseRepository.updateTodayStats(username, com.example.api.TodayStats(todayFocusTimeMs, dateString))
                     }
-                }
-            }
-            
-            // One-time .get() for today_stats
-            db.getReference("users").child(username).child("today_stats").get().addOnSuccessListener { snapshot ->
-                if (snapshot.exists()) {
-                    val todayFocusTimeMs = snapshot.child("todayFocusTimeMs").getValue(Long::class.java) ?: 0L
-                    val dateString = snapshot.child("dateString").getValue(String::class.java) ?: ""
-                    com.example.api.FirebaseRepository.updateTodayStats(username, com.example.api.TodayStats(todayFocusTimeMs, dateString))
                 }
             }
 

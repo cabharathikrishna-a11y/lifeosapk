@@ -3250,6 +3250,23 @@ fun TimerHistoryView(
                         val mins = manualMinutesInput.toIntOrNull() ?: 0
                         if (mins > 0) {
                             val username = currentUsername ?: ""
+                            
+                            val todayStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+                            val todayRecords = com.example.util.FocusTimerManager.focusRecords.value.filter { it.dateString == todayStr }
+                            val manualRecords = todayRecords.filter { it.startTime.isEmpty() || it.endTime.isEmpty() }
+                            
+                            if (manualRecords.size >= 3) {
+                                android.widget.Toast.makeText(context, "⚠️ Limit Exceeded: Max 3 manual entries allowed per day.", android.widget.Toast.LENGTH_LONG).show()
+                                return@Button
+                            }
+                            
+                            val manualMinsSum = manualRecords.sumOf { it.durationMinutes }
+                            if (manualMinsSum + mins > 240) {
+                                val remaining = maxOf(0, 240 - manualMinsSum)
+                                android.widget.Toast.makeText(context, "⚠️ Limit Exceeded: Manual focus limit is 4 hours (240 mins) per day. You have logged $manualMinsSum mins. Remaining: $remaining mins.", android.widget.Toast.LENGTH_LONG).show()
+                                return@Button
+                            }
+
                             viewModel.submitManualEntry(username, mins, manualReasonInput)
                             showManualEntryDialog = false
                             manualMinutesInput = ""

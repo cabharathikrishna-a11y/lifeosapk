@@ -16,6 +16,9 @@ object FirebaseRepository {
     private val _todayStats = MutableStateFlow<Map<String, TodayStats>>(emptyMap())
     val todayStats: StateFlow<Map<String, TodayStats>> = _todayStats.asStateFlow()
 
+    private val _statsDashboards = MutableStateFlow<Map<String, StatsDashboard>>(emptyMap())
+    val statsDashboards: StateFlow<Map<String, StatsDashboard>> = _statsDashboards.asStateFlow()
+
     private val _emojis = MutableStateFlow<Map<String, String>>(emptyMap())
     val emojis: StateFlow<Map<String, String>> = _emojis.asStateFlow()
 
@@ -25,14 +28,16 @@ object FirebaseRepository {
         _userProfiles,
         _activeTimers,
         _todayStats,
-        _emojis
-    ) { profiles, timers, stats, emojis ->
-        val usernames = profiles.keys + timers.keys + stats.keys + emojis.keys
+        _emojis,
+        _statsDashboards
+    ) { profiles, timers, stats, emojis, dashboards ->
+        val usernames = profiles.keys + timers.keys + stats.keys + emojis.keys + dashboards.keys
         usernames.associateWith { username ->
             val profile = profiles[username]
             val timer = timers[username]
             val today = stats[username]
             val emojiVal = emojis[username] ?: "🎯"
+            val dashboard = dashboards[username]
 
             val isFocusingVal = timer?.status == "FOCUSING"
             val focusStatusVal = timer?.status?.lowercase() ?: "idle"
@@ -45,6 +50,7 @@ object FirebaseRepository {
                 profile = profile,
                 activeTimer = timer,
                 todayStats = today,
+                stats_dashboard = dashboard,
                 emoji = emojiVal,
                 isFocusing = isFocusingVal,
                 focusStatus = focusStatusVal,
@@ -82,6 +88,14 @@ object FirebaseRepository {
         }
     }
 
+    fun updateStatsDashboard(username: String, dashboard: StatsDashboard) {
+        synchronized(lock) {
+            val current = _statsDashboards.value.toMutableMap()
+            current[username] = dashboard
+            _statsDashboards.value = current
+        }
+    }
+
     fun updateEmoji(username: String, emoji: String) {
         synchronized(lock) {
             val current = _emojis.value.toMutableMap()
@@ -96,6 +110,7 @@ object FirebaseRepository {
                 user.profile?.let { updateUserProfile(username, it) }
                 user.activeTimer?.let { updateActiveTimer(username, it) }
                 user.todayStats?.let { updateTodayStats(username, it) }
+                user.stats_dashboard?.let { updateStatsDashboard(username, it) }
                 user.emoji?.let { updateEmoji(username, it) }
             }
         }
@@ -106,17 +121,20 @@ object FirebaseRepository {
             val newProfiles = mutableMapOf<String, UserProfile>()
             val newTimers = mutableMapOf<String, ActiveTimer>()
             val newStats = mutableMapOf<String, TodayStats>()
+            val newDashboards = mutableMapOf<String, StatsDashboard>()
             val newEmojis = mutableMapOf<String, String>()
             
             allRemoteUsers.forEach { (username, user) ->
                 newProfiles[username] = user.profile ?: UserProfile(name = user.name ?: "", nickname = user.nickname ?: "")
                 newTimers[username] = user.activeTimer ?: ActiveTimer()
                 newStats[username] = user.todayStats ?: TodayStats()
+                newDashboards[username] = user.stats_dashboard ?: StatsDashboard()
                 newEmojis[username] = user.emoji ?: "🎯"
             }
             _userProfiles.value = newProfiles
             _activeTimers.value = newTimers
             _todayStats.value = newStats
+            _statsDashboards.value = newDashboards
             _emojis.value = newEmojis
         }
     }
