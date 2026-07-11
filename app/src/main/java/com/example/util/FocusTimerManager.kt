@@ -180,7 +180,7 @@ object FocusTimerManager {
 
                                     val activeTimerState = com.example.api.ActiveTimer(
                                         status = if (!isFocus) "BREAK" else if (isTimerRunning.value || isStopwatchActive.value) "FOCUSING" else if (accumulatedSessionTimeMs.value > 0) "PAUSED" else "RELAXING",
-                                        mode = if (isSwActive || wasStartedFromStopwatch.value) "STOPWATCH" else "POMODORO",
+                                        mode = if (!isTabFocusTimerSelected.value || wasStartedFromStopwatch.value) "STOPWATCH" else "POMODORO",
                                         startTimeMs = if (isRunning) lastResumeTimeMs.value ?: System.currentTimeMillis() else 0L,
                                         targetEndTimeMs = if (isTimerRunning.value && !isSwActive) (lastResumeTimeMs.value ?: System.currentTimeMillis()) + (timerSecondsLeft.value * 1000L) else 0L,
                                         accumulatedFocusMs = if (isFocus) accumulatedSessionTimeMs.value else 0L,
@@ -197,7 +197,7 @@ object FocusTimerManager {
                                         focusStatus = focusStatus,
                                         currentTaskTitle = if (isFocus) attachedTaskTitle else null,
                                         todaysFocusRecords = null,
-                                        isStopwatchMode = isSwActive || wasStartedFromStopwatch.value,
+                                        isStopwatchMode = !isTabFocusTimerSelected.value || wasStartedFromStopwatch.value,
                                         lastUpdatedTimestamp = System.currentTimeMillis(),
                                         lastUpdatedDeviceId = getOrCreateDeviceId(context),
                                         lastButtonClicked = null,
@@ -2622,6 +2622,71 @@ object FocusTimerManager {
         }
         
         val record = FocusRecord(startTime, endTime, taskTitle, cappedMinutes, todayStr, markedNotes, cappedSeconds, tag, id = id)
+        
+        // Save to FocusTimerManager in-memory list
+        _focusRecords.update { current ->
+            val updated = (current + record).distinctBy { it.id }
+            saveFocusRecords(context, updated)
+            
+            val totalMins = updated.sumOf { it.durationMinutes }
+            _totalFocusMinutes.value = totalMins
+            val p = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+            p.edit().putInt("total_focus_minutes", totalMins).apply()
+            
+            updated
+        }
+
+        // Save to Room Database safely
+        scope.launch(Dispatchers.IO) {
+            try {
+                val db = com.example.data.AppDatabase.getInstance(context)
+                val entity = com.example.data.FocusRecordEntity(
+                    taskTitle = record.taskTitle,
+                    tag = record.tag ?: "",
+                    notes = record.notes,
+                    durationSeconds = record.durationSeconds,
+                    durationMinutes = record.durationMinutes,
+                    dateString = record.dateString,
+                    startTime = record.startTime,
+                    endTime = record.endTime,
+                    timestamp = System.currentTimeMillis()
+                )
+                db.focusRecordDao().insertRecord(entity)
+            } catch (e: Exception) {
+                Log.e("FocusTimerManager", "Failed to save focus record to Room", e)
+            }
+        }
+
+        // Save to Firebase history_logs node
+        val prefs = context.applicationContext.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+        val currentUsername = prefs.getString("current_username", null)
+        val isLoggedIn = prefs.getBoolean("is_logged_in", false)
+        val isAdmin = prefs.getBoolean("is_admin", false)
+        if (isLoggedIn && !isAdmin && currentUsername != null) {
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val url = com.example.api.FirebaseConfig.getDatabaseUrl(context)
+                    val dbFirebase = com.google.firebase.database.FirebaseDatabase.getInstance(url)
+                    val ref = dbFirebase.getReference("users").child(currentUsername).child("history_logs").child(record.id)
+                    
+                    val recordMap = mapOf(
+                        "taskTitle" to record.taskTitle,
+                        "tag" to (record.tag ?: ""),
+                        "notes" to record.notes,
+                        "durationSeconds" to record.durationSeconds,
+                        "durationMinutes" to record.durationMinutes,
+                        "dateString" to record.dateString,
+                        "startTime" to record.startTime,
+                        "endTime" to record.endTime,
+                        "timestamp" to System.currentTimeMillis()
+                    )
+                    ref.setValue(recordMap)
+                } catch (e: Exception) {
+                    Log.e("FocusTimerManager", "Failed to upload focus record to Firebase", e)
+                }
+            }
+        }
+
         return record
     }
 
@@ -2636,6 +2701,12 @@ object FocusTimerManager {
                 val record = updatedRecord.copy(durationMinutes = cappedMinutes, durationSeconds = cappedSeconds)
                 currentList[index] = record
                 updatedList = sanitizeRecordsList(currentList)
+                
+                val totalMins = updatedList!!.sumOf { it.durationMinutes }
+                _totalFocusMinutes.value = totalMins
+                val p = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+                p.edit().putInt("total_focus_minutes", totalMins).apply()
+                
                 updatedList!!
             } else {
                 current
@@ -2654,6 +2725,12 @@ object FocusTimerManager {
             if (index != -1) {
                 currentList.removeAt(index)
                 updatedList = sanitizeRecordsList(currentList)
+                
+                val totalMins = updatedList!!.sumOf { it.durationMinutes }
+                _totalFocusMinutes.value = totalMins
+                val p = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+                p.edit().putInt("total_focus_minutes", totalMins).apply()
+                
                 updatedList!!
             } else {
                 current
@@ -2674,6 +2751,12 @@ object FocusTimerManager {
                 val record = updatedRecord.copy(durationMinutes = cappedMinutes, durationSeconds = cappedSeconds)
                 currentList[index] = record
                 updatedList = currentList
+                
+                val totalMins = currentList.sumOf { it.durationMinutes }
+                _totalFocusMinutes.value = totalMins
+                val p = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+                p.edit().putInt("total_focus_minutes", totalMins).apply()
+                
                 currentList
             } else {
                 current
@@ -2691,6 +2774,12 @@ object FocusTimerManager {
             if (index in currentList.indices) {
                 currentList.removeAt(index)
                 updatedList = currentList
+                
+                val totalMins = currentList.sumOf { it.durationMinutes }
+                _totalFocusMinutes.value = totalMins
+                val p = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+                p.edit().putInt("total_focus_minutes", totalMins).apply()
+                
                 currentList
             } else {
                 current

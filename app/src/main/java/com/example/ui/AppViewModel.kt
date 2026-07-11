@@ -1736,8 +1736,9 @@ class AppViewModel(application: Application, private val repository: LocalReposi
 
         // Throttling logic for live ticking updates to prevent network request spam (at most once per 10s)
         val now = System.currentTimeMillis()
+        val isStopwatchModeVal = !FocusTimerManager.isTabFocusTimerSelected.value || FocusTimerManager.wasStartedFromStopwatch.value
         val isStatusChanged = baseUser.isFocusing != isFocusing ||
-                baseUser.isStopwatchMode != isSwActive ||
+                baseUser.isStopwatchMode != isStopwatchModeVal ||
                 baseUser.currentTaskTitle != currentTaskTitle ||
                 baseUser.currentTag != currentTag ||
                 baseUser.focusStatus != focusStatus ||
@@ -1752,7 +1753,7 @@ class AppViewModel(application: Application, private val repository: LocalReposi
 
         val activeTimerState = com.example.api.ActiveTimer(
             status = if (!isFocusPhase) "BREAK" else if (isTimerActive || isSwActive) "FOCUSING" else if (cumSecs > 0 || swSecs > 0) "PAUSED" else "RELAXING",
-            mode = if (isSwActive || FocusTimerManager.wasStartedFromStopwatch.value) "STOPWATCH" else "POMODORO",
+            mode = if (isStopwatchModeVal) "STOPWATCH" else "POMODORO",
             startTimeMs = if (isFocusing) FocusTimerManager.lastResumeTimeMs.value ?: System.currentTimeMillis() else 0L,
             targetEndTimeMs = if (isTimerActive && !isSwActive) (FocusTimerManager.lastResumeTimeMs.value ?: System.currentTimeMillis()) + (FocusTimerManager.timerSecondsLeft.value * 1000L) else 0L,
             accumulatedFocusMs = if (isFocusPhase) FocusTimerManager.accumulatedSessionTimeMs.value else 0L,
@@ -1762,6 +1763,34 @@ class AppViewModel(application: Application, private val repository: LocalReposi
             tag = if (isFocusPhase) currentTag.takeIf { it.isNotEmpty() } else null
         )
 
+        val sdfDate = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+        val dates7 = (0..6).map { 
+            val c = java.util.Calendar.getInstance()
+            c.add(java.util.Calendar.DATE, -it)
+            sdfDate.format(c.time)
+        }
+        val dates30 = (0..29).map { 
+            val c = java.util.Calendar.getInstance()
+            c.add(java.util.Calendar.DATE, -it)
+            sdfDate.format(c.time)
+        }
+        val last7DaysSecs = FocusTimerManager.focusRecords.value.filter { it.dateString in dates7 }.sumOf { it.durationSeconds }
+        val last30DaysSecs = FocusTimerManager.focusRecords.value.filter { it.dateString in dates30 }.sumOf { it.durationSeconds }
+        val allTimeSecs = FocusTimerManager.focusRecords.value.sumOf { it.durationSeconds }
+
+        val statsDashboardState = com.example.api.StatsDashboard(
+            todayFocusMs = totalTodayFocusedSeconds * 1000L,
+            lastSevenDaysMs = last7DaysSecs * 1000L,
+            lastThirtyDaysMs = last30DaysSecs * 1000L,
+            allTimeMs = allTimeSecs * 1000L,
+            dailyBuckets = FocusTimerManager.focusRecords.value.groupBy { it.dateString }.mapValues { entry -> entry.value.sumOf { it.durationSeconds } * 1000L }
+        )
+
+        val todayStatsState = com.example.api.TodayStats(
+            todayFocusTimeMs = completedTodaySeconds * 1000L,
+            dateString = todayStr
+        )
+
         val updatedUser = if (_shareFocusDetailsEnabled.value) {
             baseUser.copy(
                 isFocusing = isFocusing,
@@ -1769,12 +1798,14 @@ class AppViewModel(application: Application, private val repository: LocalReposi
                 lastResumeTimeMs = if (isFocusing) FocusTimerManager.lastResumeTimeMs.value else null,
                 currentTaskTitle = if (isFocusing) currentTaskTitle else null,
                 currentTag = if (isFocusing) currentTag else null,
-                todaysFocusRecords = null,
-                isStopwatchMode = isSwActive,
+                todaysFocusRecords = todayRecords,
+                isStopwatchMode = isStopwatchModeVal,
                 lastUpdatedTimestamp = uploadTimestamp,
                 focusStatus = focusStatus,
                 lastUpdatedDeviceId = FocusTimerManager.getOrCreateDeviceId(getApplication()),
-                activeTimer = activeTimerState
+                activeTimer = activeTimerState,
+                todayStats = todayStatsState,
+                stats_dashboard = statsDashboardState
             )
         } else {
             baseUser.copy(
@@ -1783,12 +1814,14 @@ class AppViewModel(application: Application, private val repository: LocalReposi
                 lastResumeTimeMs = if (isFocusing) FocusTimerManager.lastResumeTimeMs.value else null,
                 currentTaskTitle = null,
                 currentTag = null,
-                todaysFocusRecords = null,
-                isStopwatchMode = isSwActive,
+                todaysFocusRecords = todayRecords,
+                isStopwatchMode = isStopwatchModeVal,
                 lastUpdatedTimestamp = uploadTimestamp,
                 focusStatus = focusStatus,
                 lastUpdatedDeviceId = FocusTimerManager.getOrCreateDeviceId(getApplication()),
-                activeTimer = activeTimerState
+                activeTimer = activeTimerState,
+                todayStats = todayStatsState,
+                stats_dashboard = statsDashboardState
             )
         }
         
@@ -4028,9 +4061,11 @@ class AppViewModel(application: Application, private val repository: LocalReposi
         val totalTodayFocusedSeconds = completedTodaySeconds + pendingReviewSeconds + activeSessionSeconds
         val todayRecords = FocusTimerManager.focusRecords.value.filter { it.dateString == todayStr || it.dateString.isEmpty() }
 
+        val isStopwatchModeVal = !FocusTimerManager.isTabFocusTimerSelected.value || FocusTimerManager.wasStartedFromStopwatch.value
+
         val activeTimerState = com.example.api.ActiveTimer(
             status = if (!isFocusPhase) "BREAK" else if (isTimerActive || isSwActive) "FOCUSING" else if (cumSecs > 0 || swSecs > 0) "PAUSED" else "RELAXING",
-            mode = if (isSwActive || FocusTimerManager.wasStartedFromStopwatch.value) "STOPWATCH" else "POMODORO",
+            mode = if (isStopwatchModeVal) "STOPWATCH" else "POMODORO",
             startTimeMs = if (isFocusing) FocusTimerManager.lastResumeTimeMs.value ?: System.currentTimeMillis() else 0L,
             targetEndTimeMs = if (isTimerActive && !isSwActive) (FocusTimerManager.lastResumeTimeMs.value ?: System.currentTimeMillis()) + (FocusTimerManager.timerSecondsLeft.value * 1000L) else 0L,
             accumulatedFocusMs = if (isFocusPhase) FocusTimerManager.accumulatedSessionTimeMs.value else 0L,
@@ -4048,7 +4083,7 @@ class AppViewModel(application: Application, private val repository: LocalReposi
                 currentTaskTitle = if (isFocusing) currentTaskTitle else null,
                 currentTag = if (isFocusing) currentTag else null,
                 todaysFocusRecords = null,
-                isStopwatchMode = isSwActive,
+                isStopwatchMode = isStopwatchModeVal,
                 lastUpdatedTimestamp = ts,
                 lastButtonClicked = null,
                 lastButtonClickedTimestamp = null,
@@ -4064,7 +4099,7 @@ class AppViewModel(application: Application, private val repository: LocalReposi
                 currentTaskTitle = null,
                 currentTag = null,
                 todaysFocusRecords = null,
-                isStopwatchMode = isSwActive,
+                isStopwatchMode = isStopwatchModeVal,
                 lastUpdatedTimestamp = ts,
                 lastButtonClicked = null,
                 lastButtonClickedTimestamp = null,

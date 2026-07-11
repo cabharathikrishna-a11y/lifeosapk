@@ -18,6 +18,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -34,7 +35,8 @@ fun FocusSummaryCard(
     liveAddedMinutes: Int = 0,
     liveAddedSeconds: Int = liveAddedMinutes * 60,
     activeTimer: com.example.api.ActiveTimer? = null,
-    todayStats: com.example.api.TodayStats? = null
+    todayStats: com.example.api.TodayStats? = null,
+    statsDashboard: com.example.api.StatsDashboard? = null
 ) {
     val currentTime = remember { androidx.compose.runtime.mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(activeTimer) {
@@ -80,8 +82,13 @@ fun FocusSummaryCard(
     val completedTotalSecs = remember(focusRecords) {
         focusRecords.sumOf { it.durationSeconds }
     }
-    val totalSecs = remember(completedTotalSecs, liveAddedSeconds) {
-        completedTotalSecs + liveAddedSeconds
+    val totalSecs = remember(completedTotalSecs, liveAddedSeconds, statsDashboard) {
+        val baseSecs = if (statsDashboard != null && statsDashboard.allTimeMs > 0) {
+            (statsDashboard.allTimeMs / 1000).toInt()
+        } else {
+            completedTotalSecs
+        }
+        baseSecs + liveAddedSeconds
     }
     
     var activeGroupTab by remember { mutableStateOf(1) } // 0 = By Task, 1 = By Tag
@@ -268,6 +275,8 @@ fun FocusSummaryCard(
                     )
                 }
             } else {
+                val totalTodayMins = tasksTaggedToday.sumOf { raw -> (todayGrouped[raw] ?: emptyList()).sumOf { it.durationMinutes } }
+                
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     tasksTaggedToday.forEach { taskTitleRaw ->
                         val taskTitle = if (taskTitleRaw.isEmpty()) {
@@ -280,6 +289,9 @@ fun FocusSummaryCard(
                         val allSessions = allGrouped[taskTitleRaw] ?: emptyList()
                         val allCount = allSessions.size
                         val allTaskMins = allSessions.sumOf { it.durationMinutes }
+
+                        val pct = if (totalTodayMins > 0) todayTaskMins.toFloat() / totalTodayMins else 0f
+                        val pctText = "${(pct * 100).toInt()}%"
 
                         Row(
                             modifier = Modifier
@@ -304,12 +316,24 @@ fun FocusSummaryCard(
                             }
                             Spacer(modifier = Modifier.width(10.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = taskTitle,
-                                    color = Color.White,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = taskTitle,
+                                        color = Color.White,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = pctText,
+                                        color = WaterBlue,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Row(
                                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -326,6 +350,17 @@ fun FocusSummaryCard(
                                         fontWeight = FontWeight.SemiBold
                                     )
                                 }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                LinearProgressIndicator(
+                                    progress = pct,
+                                    color = WaterBlue,
+                                    trackColor = Color(0xFF222222),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(4.dp)
+                                        .clip(RoundedCornerShape(2.dp))
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
                                 Row(
                                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {

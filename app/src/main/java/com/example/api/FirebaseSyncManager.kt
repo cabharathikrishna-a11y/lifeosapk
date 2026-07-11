@@ -97,7 +97,7 @@ object FirebaseSyncManager {
             val isStopwatchModeVal = timer?.mode == "STOPWATCH"
 
             return UserRemote(
-                password = snapshot.child("password").getValue(String::class.java) ?: "",
+                password = "",
                 name = profile?.name,
                 nickname = profile?.nickname,
                 profile = profile,
@@ -257,6 +257,9 @@ object FirebaseSyncManager {
                             Log.d("FirebaseSyncManager", "Skipping active_timer repository update for current user due to recent local interaction.")
                         } else {
                             FirebaseRepository.updateActiveTimer(username, timer)
+                            if (isMe) {
+                                com.example.util.FocusTimerManager.performCloudAlignmentCheck(context)
+                            }
                         }
                     } catch (e: Exception) {
                         Log.e("FirebaseSyncManager", "Error parsing active_timer for $username", e)

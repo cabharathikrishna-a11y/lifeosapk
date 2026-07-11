@@ -271,7 +271,6 @@ class InterceptingFirebaseApi(
         val userWithVersion = user.copy(appVersion = getAppVersionString())
         val userMap = mutableMapOf<String, Any>()
         
-        userWithVersion.password?.let { userMap["password"] = it }
         userWithVersion.lastUpdatedTimestamp?.let { userMap["lastUpdatedTimestamp"] = it }
         userWithVersion.isGoogleUser?.let { userMap["isGoogleUser"] = it }
         userWithVersion.email?.let { userMap["email"] = it }

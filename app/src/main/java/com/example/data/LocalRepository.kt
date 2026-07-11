@@ -343,6 +343,7 @@ class LocalRepository(val db: AppDatabase, val context: android.content.Context)
                     override fun onDataChange(snapshot: com.google.firebase.database.DataSnapshot) {
                         if (snapshot.exists()) {
                             val recordsToInsert = mutableListOf<FocusRecordEntity>()
+                            val focusRecordsToLoad = mutableListOf<com.example.ui.FocusRecord>()
                             snapshot.children.forEach { child ->
                                 try {
                                     val taskTitle = child.child("taskTitle").getValue(String::class.java) ?: ""
@@ -350,6 +351,7 @@ class LocalRepository(val db: AppDatabase, val context: android.content.Context)
                                     val notes = child.child("notes").getValue(String::class.java) ?: ""
                                     val durationSeconds = child.child("durationSeconds").getValue(Int::class.java) ?: 0
                                     val durationMinutes = child.child("durationMinutes").getValue(Int::class.java) ?: (durationSeconds / 60)
+                                    val recId = child.key ?: java.util.UUID.randomUUID().toString()
                                     
                                     // Parse timestamp with fallback to endTime for old records
                                     val timestamp = try {
@@ -411,6 +413,21 @@ class LocalRepository(val db: AppDatabase, val context: android.content.Context)
                                             timestamp = timestamp
                                         )
                                     )
+
+                                    focusRecordsToLoad.add(
+                                        com.example.ui.FocusRecord(
+                                            startTime = startTime,
+                                            endTime = endTime,
+                                            taskTitle = taskTitle,
+                                            durationMinutes = durationMinutes,
+                                            dateString = dateString,
+                                            notes = notes,
+                                            durationSeconds = durationSeconds,
+                                            tag = tag,
+                                            id = recId,
+                                            timestamp = timestamp
+                                        )
+                                    )
                                 } catch (e: Exception) {
                                     android.util.Log.e("LocalRepository", "Error parsing history log", e)
                                 }
@@ -421,6 +438,20 @@ class LocalRepository(val db: AppDatabase, val context: android.content.Context)
                                     recordsToInsert.forEach { entity ->
                                         focusRecordDao.insertRecord(entity)
                                     }
+                                }
+                            }
+
+                            if (focusRecordsToLoad.isNotEmpty()) {
+                                CoroutineScope(Dispatchers.Main).launch {
+                                    val currentList = com.example.util.FocusTimerManager.focusRecords.value
+                                    val merged = (currentList + focusRecordsToLoad).distinctBy { it.id }
+                                    com.example.util.FocusTimerManager.setFocusRecords(merged)
+                                    com.example.util.FocusTimerManager.saveFocusRecords(context, merged)
+                                    
+                                    val totalMins = merged.sumOf { it.durationMinutes }
+                                    com.example.util.FocusTimerManager.setTotalFocusMinutes(totalMins)
+                                    val prefs = context.getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
+                                    prefs.edit().putInt("total_focus_minutes", totalMins).apply()
                                 }
                             }
                         }

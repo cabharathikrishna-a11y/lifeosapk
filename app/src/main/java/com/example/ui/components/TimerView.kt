@@ -731,7 +731,7 @@ fun TimerConfirmDialogController(
     LaunchedEffect(showElapsedTimeDialog, stoppedElapsedSeconds) {
         if (showElapsedTimeDialog) {
             val totalSeconds = stoppedElapsedSeconds
-            if (totalSeconds > 0 && !isAutoSavedSessionActive) {
+            if (totalSeconds > 0) {
                 val finalMinutes = if (totalSeconds > 0) maxOf(1, (totalSeconds + 30) / 60) else 0
                 viewModel.addFocusMinutes(finalMinutes)
                 
@@ -745,26 +745,37 @@ fun TimerConfirmDialogController(
                 val endStr = formatter.format(java.util.Date())
                 val taskName = selectedTask?.title ?: "Focus Session"
 
-                val record = viewModel.addFocusRecord(startStr, endStr, taskName, finalMinutes, focusNotesInput.trim(), totalSeconds, tag = viewModel.attachedTag.value)
-                autoSavedRecordId = record.id
+                viewModel.addFocusRecord(startStr, endStr, taskName, finalMinutes, focusNotesInput.trim(), totalSeconds, tag = viewModel.attachedTag.value)
 
                 if (selectedTask != null) {
                     val updated = selectedTask.copy(actualMinutes = selectedTask.actualMinutes + finalMinutes)
                     viewModel.updateTask(updated)
                     viewModel.attachTaskToTimer(updated)
-                    originalAutoSavedTask = selectedTask
-                } else {
-                    originalAutoSavedTask = null
                 }
-
-                originalAutoSavedSeconds = totalSeconds
-                originalAutoSavedMinutes = finalMinutes
-                isAutoSavedSessionActive = true
             }
+
+            com.example.util.FocusTimerManager.recordSessionCompleteOrReset(isSaving = true)
+
+            if (stopSessionType == "timer") {
+                viewModel.resetTimer(saveSession = false)
+            } else {
+                viewModel.resetStopwatch(saveSession = false)
+            }
+            viewModel.clearPendingFocusReview()
+            onSessionStartTimestampChange(null)
+            viewModel.setShowElapsedTimeDialog(false)
+            viewModel.setFocusNotesInput("")
+            viewModel.setTimerImmersive(false)
+
+            isAutoSavedSessionActive = false
+            autoSavedRecordId = null
+            originalAutoSavedSeconds = 0
+            originalAutoSavedMinutes = 0
+            originalAutoSavedTask = null
         }
     }
 
-    if (showElapsedTimeDialog) {
+    if (showElapsedTimeDialog && false) {
         fun discardElapsedTimeSession() {
             if (isAutoSavedSessionActive) {
                 val recordId = autoSavedRecordId
@@ -1875,7 +1886,8 @@ fun androidx.compose.foundation.layout.ColumnScope.FriendHistoryDetailsContent(
             liveAddedMinutes = 0,
             liveAddedSeconds = 0,
             activeTimer = friendUser?.activeTimer,
-            todayStats = friendUser?.todayStats
+            todayStats = friendUser?.todayStats,
+            statsDashboard = friendUser?.stats_dashboard
         )
 
         // Synced logs list format matching user's page
@@ -2171,26 +2183,37 @@ fun FriendsFocusDetailsDialog(
         if (dateStr == todayStr) {
             if (isMe) {
                 val isLocalFocusing = (FocusTimerManager.isTimerRunning.value || FocusTimerManager.isStopwatchActive.value) && FocusTimerManager.isFocusPhase.value && FocusTimerManager.pendingFocusReview.value == null
-                val completedTodaySecs = FocusTimerManager.focusRecords.value.sumOf { FocusTimerManager.getOverlapSecondsForDate(it, todayStr) }
-                val pendingSecs = FocusTimerManager.pendingFocusReview.value?.let { FocusTimerManager.getOverlapSecondsForDate(it, todayStr) } ?: 0
-                val activeSessionOverlap = if (isLocalFocusing) {
-                    val startMs = viewModel.sessionStartTimestamp.value
-                    if (startMs != null) {
-                        FocusTimerManager.getActiveSessionOverlapSeconds(startMs, todayStr)
-                    } else {
-                        val currentChunkMs = FocusTimerManager.getCurrentChunkMs()
-                        val totalMs = FocusTimerManager.accumulatedSessionTimeMs.value + currentChunkMs
+                if (isLocalFocusing) {
+                    val completedTodaySecs = FocusTimerManager.focusRecords.value.sumOf { FocusTimerManager.getOverlapSecondsForDate(it, todayStr) }
+                    val pendingSecs = FocusTimerManager.pendingFocusReview.value?.let { FocusTimerManager.getOverlapSecondsForDate(it, todayStr) } ?: 0
+                    val activeSessionOverlap = if (isLocalFocusing) {
+                        val startMs = viewModel.sessionStartTimestamp.value
+                        if (startMs != null) {
+                            FocusTimerManager.getActiveSessionOverlapSeconds(startMs, todayStr)
+                        } else {
+                            val currentChunkMs = FocusTimerManager.getCurrentChunkMs()
+                            val totalMs = FocusTimerManager.accumulatedSessionTimeMs.value + currentChunkMs
+                            (totalMs / 1000).toInt()
+                        }
+                    } else 0
+                    return completedTodaySecs + pendingSecs + activeSessionOverlap
+                } else if (peerRemote != null) {
+                    val isRemoteFocusing = peerRemote.isFocusing == true
+                    val liveFocusedSeconds = if (isRemoteFocusing && peerRemote.lastResumeTimeMs != null) {
+                        val currentChunkMs = (currentUnixTime * 1000) - peerRemote.lastResumeTimeMs!!
+                        val totalMs = (peerRemote.accumulatedTimeMs ?: 0L) + maxOf(0L, currentChunkMs)
                         (totalMs / 1000).toInt()
-                    }
-                } else {
-                    if (FocusTimerManager.pendingFocusReview.value == null) {
-                        (FocusTimerManager.accumulatedSessionTimeMs.value / 1000).toInt()
                     } else {
-                        0
+                        ((peerRemote.accumulatedTimeMs ?: 0L) / 1000).toInt()
                     }
+                    val completedTodaySecs = peerRemote.todaysFocusRecords?.sumOf { 
+                        FocusTimerManager.getOverlapSecondsForDate(it, todayStr) 
+                    } ?: 0
+                    return liveFocusedSeconds + completedTodaySecs
+                } else {
+                    val completedTodaySecs = FocusTimerManager.focusRecords.value.sumOf { FocusTimerManager.getOverlapSecondsForDate(it, todayStr) }
+                    return completedTodaySecs
                 }
-
-                return completedTodaySecs + pendingSecs + activeSessionOverlap
             } else {
                 if (peerRemote != null) {
                     val lastUpdated = peerRemote.lastUpdatedTimestamp ?: 0L
@@ -2710,7 +2733,24 @@ fun LiveDurationText(
     val systemTodayStr = remember { java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date()) }
 
     var liveSeconds by remember(baseSeconds, isFocusing, isMe, peerRemote) {
-        val initialSecs = if (isFocusing && !isMe && peerRemote != null) {
+        val initialSecs = if (isMe) {
+            val isLocalFocusing = (FocusTimerManager.isTimerRunning.value || FocusTimerManager.isStopwatchActive.value) && FocusTimerManager.isFocusPhase.value && FocusTimerManager.pendingFocusReview.value == null
+            if (isLocalFocusing) {
+                baseSeconds
+            } else if (isFocusing && peerRemote != null) {
+                val currentUnixTime = System.currentTimeMillis() / 1000
+                val completedTodaySecs = peerRemote.todaysFocusRecords?.sumOf { FocusTimerManager.getOverlapSecondsForDate(it, systemTodayStr) } ?: 0
+                if (peerRemote.lastResumeTimeMs != null) {
+                    val currentChunkMs = (currentUnixTime * 1000) - peerRemote.lastResumeTimeMs!!
+                    val totalMs = (peerRemote.accumulatedTimeMs ?: 0L) + maxOf(0L, currentChunkMs)
+                    completedTodaySecs + (totalMs / 1000).toInt()
+                } else {
+                    completedTodaySecs + ((peerRemote.accumulatedTimeMs ?: 0L) / 1000).toInt()
+                }
+            } else {
+                baseSeconds
+            }
+        } else if (isFocusing && peerRemote != null) {
             val currentUnixTime = System.currentTimeMillis() / 1000
             val completedTodaySecs = peerRemote.todaysFocusRecords?.sumOf { FocusTimerManager.getOverlapSecondsForDate(it, systemTodayStr) } ?: 0
             
@@ -2734,19 +2774,31 @@ fun LiveDurationText(
                 val currentUnixTime = System.currentTimeMillis() / 1000
                 if (isMe) {
                     val isLocalFocusing = (FocusTimerManager.isTimerRunning.value || FocusTimerManager.isStopwatchActive.value) && FocusTimerManager.isFocusPhase.value && FocusTimerManager.pendingFocusReview.value == null
-                    val completedTodaySecs = FocusTimerManager.focusRecords.value.sumOf { FocusTimerManager.getOverlapSecondsForDate(it, systemTodayStr) }
-                    val pendingSecs = FocusTimerManager.pendingFocusReview.value?.let { FocusTimerManager.getOverlapSecondsForDate(it, systemTodayStr) } ?: 0
-                    val activeSessionOverlap = if (isLocalFocusing) {
+                    if (isLocalFocusing) {
+                        val completedTodaySecs = FocusTimerManager.focusRecords.value.sumOf { FocusTimerManager.getOverlapSecondsForDate(it, systemTodayStr) }
+                        val pendingSecs = FocusTimerManager.pendingFocusReview.value?.let { FocusTimerManager.getOverlapSecondsForDate(it, systemTodayStr) } ?: 0
                         val startMs = viewModel.sessionStartTimestamp.value
-                        if (startMs != null) {
+                        val activeSessionOverlap = if (startMs != null) {
                             FocusTimerManager.getActiveSessionOverlapSeconds(startMs, systemTodayStr)
                         } else {
                             val currentChunkMs = FocusTimerManager.getCurrentChunkMs()
                             val totalMs = FocusTimerManager.accumulatedSessionTimeMs.value + currentChunkMs
                             (totalMs / 1000).toInt()
                         }
-                    } else 0
-                    liveSeconds = completedTodaySecs + pendingSecs + activeSessionOverlap
+                        liveSeconds = completedTodaySecs + pendingSecs + activeSessionOverlap
+                    } else if (peerRemote != null) {
+                        val completedTodaySecs = peerRemote.todaysFocusRecords?.sumOf { FocusTimerManager.getOverlapSecondsForDate(it, systemTodayStr) } ?: 0
+                        if (peerRemote.lastResumeTimeMs != null) {
+                            val currentChunkMs = (currentUnixTime * 1000) - peerRemote.lastResumeTimeMs!!
+                            val totalMs = (peerRemote.accumulatedTimeMs ?: 0L) + maxOf(0L, currentChunkMs)
+                            liveSeconds = completedTodaySecs + (totalMs / 1000).toInt()
+                        } else {
+                            liveSeconds = completedTodaySecs + ((peerRemote.accumulatedTimeMs ?: 0L) / 1000).toInt()
+                        }
+                    } else {
+                        val completedTodaySecs = FocusTimerManager.focusRecords.value.sumOf { FocusTimerManager.getOverlapSecondsForDate(it, systemTodayStr) }
+                        liveSeconds = completedTodaySecs
+                    }
                 } else if (peerRemote != null) {
                     val completedTodaySecs = peerRemote.todaysFocusRecords?.sumOf { FocusTimerManager.getOverlapSecondsForDate(it, systemTodayStr) } ?: 0
                     if (peerRemote.lastResumeTimeMs != null) {
@@ -3038,7 +3090,8 @@ fun TimerHistoryView(
                 liveAddedMinutes = localLiveAddedSeconds / 60,
                 liveAddedSeconds = localLiveAddedSeconds,
                 activeTimer = meUser?.activeTimer,
-                todayStats = meUser?.todayStats
+                todayStats = meUser?.todayStats,
+                statsDashboard = meUser?.stats_dashboard
             )
 
             val completedSecs = remember(focusRecords, selectedDateStr) {

@@ -1291,22 +1291,22 @@ object AppUpdateManager {
     fun installApk(context: Context, apkFile: File) {
         updateScope.launch {
             try {
-                if (!apkFile.exists() || apkFile.length() == 0L || !isValidApk(apkFile)) {
-                    Log.e(TAG, "APK file is missing, empty, or corrupted")
-                    _updateStatus.value = UpdateStatus.Error("The update installation failed: The APK file is missing or corrupted. Please try downloading again.")
-                    return@launch
-                }
-
-                // Secure user data asynchronously so we don't block launching the package installer
-                updateScope.launch(Dispatchers.IO) {
-                    try {
-                        Log.i(TAG, "Securing user data asynchronously in background prior to package installation...")
+                // Secure user data synchronously on IO Dispatcher prior to anything else so we guarantee backup is created first
+                try {
+                    Log.i(TAG, "Securing user data prior to package installation...")
+                    withContext(Dispatchers.IO) {
                         val db = com.example.data.AppDatabase.getInstance(context)
                         com.example.util.DatabaseBackupHelper.autoBackup(context, db)
-                        Log.i(TAG, "Asynchronous pre-installation backup finished.")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Pre-installation database auto-backup failed", e)
                     }
+                    Log.i(TAG, "Pre-installation backup finished.")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Pre-installation database auto-backup failed", e)
+                }
+
+                if (!apkFile.exists() || apkFile.length() == 0L || !isValidApk(apkFile)) {
+                    Log.e(TAG, "APK file is missing, empty, or corrupted")
+                    _updateStatus.value = UpdateStatus.Error("The update installation failed: The APK file is missing or corrupted. Please try downloading again. (Your local data has been successfully secured to a backup file first)")
+                    return@launch
                 }
 
                 // Check if we need to request "unknown sources" permission on Android Oreo+
