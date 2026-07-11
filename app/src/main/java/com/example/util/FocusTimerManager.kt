@@ -2635,7 +2635,7 @@ object FocusTimerManager {
         _pendingFocusReview.value = null
     }
 
-    fun addFocusRecord(context: Context, startTime: String, endTime: String, taskTitle: String, durationMinutes: Int, notes: String = "", durationSeconds: Int = durationMinutes * 60, tag: String = "", id: String = java.util.UUID.randomUUID().toString()): FocusRecord {
+    fun addFocusRecord(context: Context, startTime: String, endTime: String, taskTitle: String, durationMinutes: Int, notes: String = "", durationSeconds: Int = durationMinutes * 60, tag: String = "", id: String = java.util.UUID.randomUUID().toString(), mode: String = "POMODORO"): FocusRecord {
         val todayStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
         val cappedMinutes = if (durationMinutes > 360) 360 else durationMinutes
         val cappedSeconds = if (durationSeconds > 21600) 21600 else durationSeconds
@@ -2648,7 +2648,18 @@ object FocusTimerManager {
             notes
         }
         
-        val record = FocusRecord(startTime, endTime, taskTitle, cappedMinutes, todayStr, markedNotes, cappedSeconds, tag, id = id)
+        val record = FocusRecord(
+            startTime = startTime,
+            endTime = endTime,
+            taskTitle = taskTitle,
+            durationMinutes = cappedMinutes,
+            dateString = todayStr,
+            notes = markedNotes,
+            durationSeconds = cappedSeconds,
+            tag = tag,
+            id = id,
+            mode = mode
+        )
         
         // Save to FocusTimerManager in-memory list
         _focusRecords.update { current ->
@@ -2676,7 +2687,8 @@ object FocusTimerManager {
                     dateString = record.dateString,
                     startTime = record.startTime,
                     endTime = record.endTime,
-                    timestamp = System.currentTimeMillis()
+                    timestamp = System.currentTimeMillis(),
+                    mode = record.mode
                 )
                 db.focusRecordDao().insertRecord(entity)
             } catch (e: Exception) {
@@ -2705,7 +2717,8 @@ object FocusTimerManager {
                         "dateString" to record.dateString,
                         "startTime" to record.startTime,
                         "endTime" to record.endTime,
-                        "timestamp" to System.currentTimeMillis()
+                        "timestamp" to System.currentTimeMillis(),
+                        "mode" to record.mode
                     )
                     ref.setValue(recordMap)
                 } catch (e: Exception) {

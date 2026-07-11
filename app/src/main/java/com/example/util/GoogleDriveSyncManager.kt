@@ -616,11 +616,23 @@ object GoogleDriveSyncManager {
                     val originalSecs = if (parts.size >= 7) parts[6].toIntOrNull() ?: (originalMins * 60) else (originalMins * 60)
                     
                     val durationMins = if (originalMins > 720) 720 else originalMins
+                    val durationSecs = if (originalSecs > 43200) 43200 else originalSecs
                     val tagValue = if (parts.size > 7) parts[7] else ""
                     val modeValue = if (parts.size > 8) parts[8] else "POMODORO"
                     val idValue = if (parts.size > 9) parts[9] else java.util.UUID.randomUUID().toString()
 
-                    com.example.ui.FocusRecord(parts[0], parts[1], parts[2], durationMins, dateValue, notesValue, durationSecs, tagValue, idValue, modeValue)
+                    com.example.ui.FocusRecord(
+                        startTime = parts[0],
+                        endTime = parts[1],
+                        taskTitle = parts[2],
+                        durationMinutes = durationMins,
+                        dateString = dateValue,
+                        notes = notesValue,
+                        durationSeconds = durationSecs,
+                        tag = tagValue,
+                        id = idValue,
+                        mode = modeValue
+                    )
                 } else null
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
