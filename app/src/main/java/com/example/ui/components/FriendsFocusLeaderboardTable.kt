@@ -104,33 +104,7 @@ fun FriendsFocusLeaderboardTable(
                 username = meUsername,
                 displayName = currentUserRemote?.nickname ?: currentUserRemote?.name ?: "Bharathikrishna M",
                 emoji = currentUserRemote?.emoji ?: "👨‍💻",
-                focusedSeconds = run {
-                    val meUser = allUsers[meUsername] ?: currentUserRemote
-                    val baseMs = if (meUser?.todayStats?.dateString == selectedDateStr || meUser?.todayStats?.dateString.isNullOrEmpty()) {
-                        meUser?.todayStats?.todayFocusTimeMs ?: 0L
-                    } else {
-                        0L
-                    }
-                    val liveDeltaMs = meUser?.activeTimer?.let { activeTimer ->
-                        when (activeTimer.status) {
-                            "FOCUSING" -> {
-                                val elapsed = currentTime.value - activeTimer.startTimeMs
-                                maxOf(0L, elapsed) + activeTimer.accumulatedFocusMs
-                            }
-                            "BREAK" -> {
-                                if (activeTimer.taskTitle == "Taking a Break" || activeTimer.tag == "Break") {
-                                    0L
-                                } else {
-                                    activeTimer.accumulatedFocusMs
-                                }
-                            }
-                            "PAUSED" -> activeTimer.accumulatedFocusMs
-                            "RELAXING" -> 0L
-                            else -> activeTimer.accumulatedFocusMs
-                        }
-                    } ?: 0L
-                    ((baseMs + liveDeltaMs) / 1000).toInt()
-                },
+                focusedSeconds = myTodaySeconds,
                 isMe = true
             )
             

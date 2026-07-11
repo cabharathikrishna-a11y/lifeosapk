@@ -187,17 +187,22 @@ object FocusTimerManager {
                                         accumulatedBreakMs = if (!isFocus) accumulatedSessionTimeMs.value else 0L,
                                         timezoneOffsetMinutes = java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / (60 * 1000),
                                         taskTitle = if (isFocus) attachedTaskTitle else null,
-                                        tag = if (isFocus) attachedTag.value.takeIf { it.isNotEmpty() } else null
+                                        tag = if (isFocus) attachedTag.value.takeIf { it.isNotEmpty() } else null,
+                                        focusDurationMinutes = if (isFocus) _timerDurationMinutes.value else null,
+                                        breakDurationMinutes = if (!isFocus) _stopwatchBreakDurationMinutes.value else null,
+                                        lastUpdatedTimestamp = System.currentTimeMillis()
                                     )
 
                                     val updatedUser = baseUser.copy(
                                         isFocusing = isRunning,
-                                        accumulatedTimeMs = accumulatedSessionTimeMs.value,
+                                        accumulatedTimeMs = accumulatedSessionTimeMs.value + (if (isRunning) getCurrentChunkMs() else 0L),
                                         lastResumeTimeMs = if (isRunning) lastResumeTimeMs.value else null,
                                         focusStatus = focusStatus,
                                         currentTaskTitle = if (isFocus) attachedTaskTitle else null,
                                         todaysFocusRecords = null,
                                         isStopwatchMode = !isTabFocusTimerSelected.value || wasStartedFromStopwatch.value,
+                                        mode = if (!isTabFocusTimerSelected.value || wasStartedFromStopwatch.value) "STOPWATCH" else "POMODORO",
+                                        focusRecords = null,
                                         lastUpdatedTimestamp = System.currentTimeMillis(),
                                         lastUpdatedDeviceId = getOrCreateDeviceId(context),
                                         lastButtonClicked = null,
@@ -287,6 +292,13 @@ object FocusTimerManager {
                                             }
                                             _accumulatedSessionTimeMs.value = activeTimer.accumulatedFocusMs
                                             _lastResumeTimeMs.value = activeTimer.startTimeMs
+                                            
+                                            // Auto-adjust local duration if the remote session specifies it
+                                            if (activeTimer.focusDurationMinutes != null && activeTimer.focusDurationMinutes > 0) {
+                                                if (_timerDurationMinutes.value != activeTimer.focusDurationMinutes) {
+                                                    setTimerDuration(context, activeTimer.focusDurationMinutes)
+                                                }
+                                            }
                                             
                                             val timerDurationSecs = _timerDurationMinutes.value * 60
                                             val secondsLeft = (timerDurationSecs - elapsedSeconds).coerceAtLeast(0)
@@ -570,6 +582,9 @@ object FocusTimerManager {
     val focusRecords: StateFlow<List<FocusRecord>> = _focusRecords.asStateFlow()
 
     private val _liveGrandTotalSeconds = MutableStateFlow(0)
+
+    private var _optimisticHandoffLock = 0
+    private var _optimisticHandoffExpiration = 0L
     val liveGrandTotalSeconds: StateFlow<Int> = _liveGrandTotalSeconds.asStateFlow()
 
     // Option toggles (Encapsulated)
@@ -1016,7 +1031,7 @@ object FocusTimerManager {
         
         if (!isFocus) return 0 // Breaks don't count towards focus time
         
-        return if (isSwActive) {
+        val activeSecs = if (isSwActive) {
             val currentChunk = getCurrentChunkMs()
             val totalMs = _accumulatedSessionTimeMs.value + currentChunk
             (totalMs / 1000).toInt()
@@ -1028,6 +1043,11 @@ object FocusTimerManager {
             val accumulatedSecs = (_accumulatedSessionTimeMs.value / 1000).toInt()
             accumulatedSecs
         }
+
+        if (activeSecs == 0 && System.currentTimeMillis() < _optimisticHandoffExpiration) {
+            return _optimisticHandoffLock
+        }
+        return activeSecs
     }
 
     fun recalculateGrandTotalSeconds(context: Context) {
@@ -1419,6 +1439,10 @@ object FocusTimerManager {
             
             // Trigger immediate, robust data persistence before resetting the active session tracking values
             val elapsedSecs = if (_cumulativeSessionFocusSeconds.value > 0) _cumulativeSessionFocusSeconds.value else duration * 60
+            
+            _optimisticHandoffLock = elapsedSecs
+            _optimisticHandoffExpiration = System.currentTimeMillis() + 3000L
+
             val savedRecord = persistFocusSession(appContext, elapsedSecs, isTimer = true)
 
             _pendingFocusReview.value = savedRecord ?: FocusRecord(startStr, endStr, taskName, duration, todayStr, "", duration * 60)
@@ -1539,11 +1563,12 @@ object FocusTimerManager {
         val formatter = java.text.SimpleDateFormat("hh:mm:ss a", java.util.Locale.getDefault())
         val startStr = formatter.format(java.util.Date(StableTime.currentTimeMillis() - elapsedSecs * 1000L))
         val endStr = formatter.format(java.util.Date())
-        val taskName = _attachedTask.value?.title ?: "Focus Session"
-        val tagValue = _attachedTag.value
+        val taskName = _attachedTask.value?.title ?: "General Focus"
+        val tagValue = if (_attachedTag.value.isNullOrBlank()) "Study" else _attachedTag.value
+        val mode = if (!isTimer) "STOPWATCH" else "POMODORO"
         
         // 1. Save Focus Record locally
-        val record = addFocusRecord(context, startStr, endStr, taskName, finalMinutes, "", elapsedSecs, tagValue)
+        val record = addFocusRecord(context, startStr, endStr, taskName, finalMinutes, "", elapsedSecs, tagValue, mode = mode)
 
         // 2. Update Stats (Pomos count and total focus minutes)
         val prefs = context.applicationContext.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
@@ -1647,6 +1672,8 @@ object FocusTimerManager {
         addSystemLog(appContext, "Reset Timer", "BUTTON_PRESS", "SaveSession=$saveSession, ElapsedSecs=${elapsedSecs}s")
         
         if (saveSession && elapsedSecs > 0 && _isFocusPhase.value && !_wasStartedFromStopwatch.value) {
+            _optimisticHandoffLock = elapsedSecs
+            _optimisticHandoffExpiration = System.currentTimeMillis() + 3000L
             persistFocusSession(context, elapsedSecs, isTimer = true)
         }
 
@@ -1714,10 +1741,8 @@ object FocusTimerManager {
         val appContext = context.applicationContext
         if (_wasStartedFromStopwatch.value) {
             _isFocusPhase.value = true
-            _wasStartedFromStopwatch.value = false
-            val prefs = appContext.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-            prefs.edit().putBoolean("was_started_from_stopwatch", false).apply()
-
+            
+            // Keep wasStartedFromStopwatch true to retain stopwatch mode!
             _timerSecondsLeft.value = _timerDurationMinutes.value * 60
             KeepAliveService.updateNotification(appContext)
                 syncStateToFirebase(appContext)
@@ -1856,6 +1881,8 @@ object FocusTimerManager {
         addSystemLog(appContext, "Reset Stopwatch", "BUTTON_PRESS", "SaveSession=$saveSession, Seconds=${elapsedSecs}s")
         
         if (saveSession && elapsedSecs > 0) {
+            _optimisticHandoffLock = elapsedSecs
+            _optimisticHandoffExpiration = System.currentTimeMillis() + 3000L
             persistFocusSession(context, elapsedSecs, isTimer = false)
         }
 
@@ -3073,10 +3100,9 @@ object FocusTimerManager {
     }
 
     fun getTodayFocusSeconds(): Int {
-        val todayStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
-        return focusRecords.value.sumOf { r ->
-            getOverlapSecondsForDate(r, todayStr)
-        }
+        // Return the exact live total (including currently ticking session) 
+        // to ensure instant UI updates for daily totals.
+        return _liveGrandTotalSeconds.value
     }
 
     fun loadFocusTags(context: Context): List<String> {

@@ -141,7 +141,8 @@ data class FocusRecordEntity(
     val dateString: String = "", // e.g., "yyyy-MM-dd"
     val startTime: String = "",  // e.g., "14:30"
     val endTime: String = "",    // e.g., "14:55"
-    val timestamp: Long = System.currentTimeMillis() // Universal sorting anchor
+    val timestamp: Long = System.currentTimeMillis(), // Universal sorting anchor
+    val mode: String = "POMODORO" // e.g., POMODORO or STOPWATCH
 )
 
 @Entity(tableName = "keep_notes")

@@ -3206,6 +3206,22 @@ fun TimerHistoryView(
                                                 )
                                             }
                                         }
+                                        if (record.mode.isNotEmpty()) {
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Box(
+                                                modifier = Modifier
+                                                    .background(Color(0xFF222222), RoundedCornerShape(4.dp))
+                                                    .border(1.dp, Color(0xFF333333), RoundedCornerShape(4.dp))
+                                                    .padding(horizontal = 5.dp, vertical = 1.5.dp)
+                                            ) {
+                                                Text(
+                                                    text = record.mode,
+                                                    color = Color.LightGray,
+                                                    fontSize = 8.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
                                     }
                                     Spacer(modifier = Modifier.height(2.dp))
                                     // Start - End timestamps

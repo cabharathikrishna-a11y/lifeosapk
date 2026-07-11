@@ -27,6 +27,7 @@ data class UserRemote(
     val todaysFocusRecords: List<FocusRecord>? = emptyList(),
     val focusRecords: List<FocusRecord>? = emptyList(),
     val isStopwatchMode: Boolean? = false,
+    val mode: String? = "POMODORO",
 
     val profile: UserProfile? = null,
     val activeTimer: ActiveTimer? = null,
@@ -38,6 +39,7 @@ data class UserRemote(
     val focusStatus: String? = null,
     val currentTag: String? = null,
     val isGoogleUser: Boolean? = null,
+
     val email: String? = null,
     val status: String? = null,
     val appVersion: String? = null,
@@ -64,7 +66,10 @@ data class ActiveTimer(
     val timezoneOffsetMinutes: Int = 0,
     val taskTitle: String? = null,
     val tag: String? = null,
-    val isStopwatchMode: Boolean = (mode == "STOPWATCH")
+    val isStopwatchMode: Boolean = (mode == "STOPWATCH"),
+    val focusDurationMinutes: Int? = null,
+    val breakDurationMinutes: Int? = null,
+    val lastUpdatedTimestamp: Long = 0L
 )
 
 @JsonClass(generateAdapter = true)
@@ -295,7 +300,10 @@ class InterceptingFirebaseApi(
             "accumulatedBreakMs" to t.accumulatedBreakMs,
             "timezoneOffsetMinutes" to t.timezoneOffsetMinutes,
             "taskTitle" to (t.taskTitle ?: "General Focus"),
-            "tag" to (t.tag ?: "Study")
+            "tag" to (t.tag ?: "Study"),
+            "focusDurationMinutes" to t.focusDurationMinutes,
+            "breakDurationMinutes" to t.breakDurationMinutes,
+            "lastUpdatedTimestamp" to t.lastUpdatedTimestamp
         )
 
         // today_stats is exclusively managed by Firebase Cloud Functions.

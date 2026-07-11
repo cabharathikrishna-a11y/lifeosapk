@@ -44,7 +44,8 @@ data class FocusRecord(
     val durationSeconds: Int = durationMinutes * 60,
     val tag: String = "",
     val id: String = java.util.UUID.randomUUID().toString(),
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val mode: String = "POMODORO"
 )
 
 sealed class AiHandshakeState {
